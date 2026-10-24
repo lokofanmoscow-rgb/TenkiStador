@@ -59,7 +59,12 @@ class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer, val music: Musi
         music.play(trackFor(s))
     }
 
-    private fun trackFor(s: Scene) = if (s is BattleScene) "battle" else "menu"
+    private fun trackFor(s: Scene) = when (s) {
+        is BattleScene -> "battle"
+        is ShopScene -> "shop"
+        is SaveSlotsScene -> music.current ?: "menu"
+        else -> "menu"
+    }
 
     fun resize(w: Float, h: Float) {
         if (w == vw && h == vh) return
@@ -121,6 +126,7 @@ class AndroidSound(private val s: Sound) : SoundPlayer {
 
 interface MusicPlayer {
     var enabled: Boolean
+    val current: String? get() = null
     fun play(track: String)
     fun pause()
     fun resume()

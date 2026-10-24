@@ -150,26 +150,13 @@ class MenuScene(game: Game) : Scene(game) {
 
 }
 
-/** The "TankPlanet" title: metal letters over a ringed planet. */
+/** The "TankPlanet" title: metal letters with a passing glint. */
 fun drawLogo(c: Canvas, cx: Float, base: Float, t: Float) {
     val size = 66f
     val text = "TankPlanet"
     val w = Gfx.measure(text, size)
-    // Ringed planet behind the title.
-    val px = cx + w / 2 + 22f
-    val py = base - size * 0.36f
-    Gfx.glow(c, px, py, 70f, 0x443D5AFE)
-    val f = Gfx.fill
-    f.shader = android.graphics.RadialGradient(px - 10, py - 12, 40f, 0xFFFFCC80.toInt(), 0xFF8D3C14.toInt(), android.graphics.Shader.TileMode.CLAMP)
-    c.drawCircle(px, py, 30f, f)
-    f.shader = null
-    val ring = android.graphics.RectF(px - 58, py - 12, px + 58, py + 12)
-    Gfx.stroke.color = 0xCCFFE0B2.toInt(); Gfx.stroke.strokeWidth = 4f
-    c.save()
-    c.rotate(-14f, px, py)
-    c.drawArc(ring, 0f, 180f, false, Gfx.stroke)
-    c.restore()
-    // Letters: dark outline, then a steel gradient.
+    Gfx.glow(c, cx, base - size * 0.35f, w * 0.6f, 0x223D5AFE)
+    // Letters: dark outline, then a steel-to-gold gradient.
     val p = Gfx.text
     p.typeface = Gfx.bold
     p.textSize = size
@@ -190,11 +177,5 @@ fun drawLogo(c: Canvas, cx: Float, base: Float, t: Float) {
     c.save()
     c.clipRect(cx - w / 2, base - size, cx + w / 2, base + 8)
     Gfx.glow(c, gx, base - size * 0.35f, 40f, 0x55FFFFFF)
-    c.restore()
-    // Front half of the ring passes over the planet.
-    c.save()
-    c.rotate(-14f, px, py)
-    Gfx.stroke.color = 0xEEFFE0B2.toInt()
-    c.drawArc(ring, 180f, 180f, false, Gfx.stroke)
     c.restore()
 }

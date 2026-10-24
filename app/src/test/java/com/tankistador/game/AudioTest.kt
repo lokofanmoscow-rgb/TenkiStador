@@ -32,15 +32,17 @@ class AudioTest {
 
     @Test
     fun music() {
-        val t0 = System.currentTimeMillis()
-        val menu = MusicGen.render("menu")
-        val battle = MusicGen.render("battle")
-        println("music rendered in ${System.currentTimeMillis() - t0} ms")
-        check("music_menu", menu)
-        check("music_battle", battle)
-        assertTrue(menu.size > Synth.RATE * 15)
-        // The loop seam should not click: the last and first samples are close.
-        assertTrue(abs(menu.last() - menu.first()) < 0.25f)
-        assertTrue(abs(battle.last() - battle.first()) < 0.25f)
+        for (name in MusicGen.tracks) {
+            val t0 = System.currentTimeMillis()
+            val a = MusicGen.render(name)
+            println("music $name: ${a.size / Synth.RATE} s rendered in ${System.currentTimeMillis() - t0} ms")
+            check("music_$name", a)
+            assertTrue(a.size > Synth.RATE * 15)
+            // The loop seam should be no rougher than the music itself.
+            var inner = 0f
+            for (i in 1 until a.size) inner = maxOf(inner, abs(a[i] - a[i - 1]))
+            val seam = abs(a.first() - a.last())
+            assertTrue("$name seam $seam vs $inner", seam <= maxOf(0.1f, inner))
+        }
     }
 }
