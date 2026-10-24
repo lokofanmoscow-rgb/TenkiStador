@@ -27,7 +27,26 @@ class AudioTest {
 
     @Test
     fun effects() {
-        for ((name, gen) in Sfx.all) check(name, gen())
+        for ((name, _) in Sfx.all) check(name, Sfx.render(name))
+    }
+
+    private fun db(x: Float) = 20 * kotlin.math.log10(maxOf(x, 1e-6f))
+
+    /** Weapon sounds and battle music must come out at the same level (within 2 dB). */
+    @Test
+    fun effectsAndMusicAreBalanced() {
+        for (track in MusicGen.tracks) {
+            val measured = Synth.loudness(MusicGen.render(track))
+            val expected = Mixer.trackLoudness[track]!!
+            assertTrue("$track loudness table is stale: $measured vs $expected", abs(db(measured) - db(expected)) < 0.5f)
+            val heard = db(measured * Mixer.musicVolume(track))
+            assertTrue("$track plays at $heard dB", abs(heard - db(Mixer.EFFECT_LOUDNESS)) < 1f)
+        }
+        val battle = db(Mixer.trackLoudness["battle"]!! * Mixer.musicVolume("battle"))
+        for (name in listOf("shot", "boom", "bigboom", "rocket", "hit", "quake", "meteor", "grav", "bounce", "fire", "tele")) {
+            val l = db(Synth.loudness(Sfx.render(name)))
+            assertTrue("$name is ${l - battle} dB away from the music", abs(l - battle) < 2f)
+        }
     }
 
     @Test

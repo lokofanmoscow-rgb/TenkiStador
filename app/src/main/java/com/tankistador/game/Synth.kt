@@ -9,6 +9,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.tanh
 
 /** Small offline DSP toolkit used to build the sound effects and the music. */
@@ -99,6 +100,36 @@ object Synth {
         for (v in a) m = max(m, abs(v))
         val k = peak / m
         for (i in a.indices) a[i] = (tanh(a[i] * k * 1.1) / tanh(1.1)).toFloat().coerceIn(-1f, 1f)
+        return a
+    }
+
+    /** Perceived level: the loudest 200 ms stretch, as RMS. */
+    fun loudness(a: FloatArray): Float {
+        val win = RATE / 5
+        if (a.size <= win) {
+            var s = 0.0
+            for (v in a) s += v * v
+            return sqrt(s / max(1, a.size)).toFloat()
+        }
+        var best = 0.0
+        var i = 0
+        while (i + win <= a.size) {
+            var s = 0.0
+            for (k in i until i + win) s += a[k] * a[k]
+            best = max(best, s / win)
+            i += win / 2
+        }
+        return sqrt(best).toFloat()
+    }
+
+    /** Scales a sound to the given loudness; peaks above 0.9 are rounded off instead of clipping. */
+    fun toLoudness(a: FloatArray, target: Float): FloatArray {
+        val k = target / max(1e-6f, loudness(a))
+        for (i in a.indices) {
+            val x = a[i] * k
+            val m = abs(x)
+            a[i] = if (m <= 0.9f) x else (Math.signum(x) * (0.9 + 0.1 * tanh((m - 0.9) / 0.1))).toFloat()
+        }
         return a
     }
 

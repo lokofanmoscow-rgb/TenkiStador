@@ -26,12 +26,12 @@ class Sound(ctx: Context) {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
             val sp = SoundPool.Builder().setMaxStreams(12).setAudioAttributes(attrs).build()
-            for (old in 1..4) File(ctx.cacheDir, "sfx_v$old").deleteRecursively()
-            val dir = File(ctx.cacheDir, "sfx_v5")
+            for (old in 1..5) File(ctx.cacheDir, "sfx_v$old").deleteRecursively()
+            val dir = File(ctx.cacheDir, "sfx_v6")
             dir.mkdirs()
-            for ((name, gen) in Sfx.all) {
+            for ((name, _) in Sfx.all) {
                 val f = File(dir, "$name.wav")
-                if (!f.exists() || f.length() < 100) f.writeBytes(Synth.wav(gen()))
+                if (!f.exists() || f.length() < 100) f.writeBytes(Synth.wav(Sfx.render(name)))
                 ids[name] = sp.load(f.absolutePath, 1)
             }
             pool = sp
@@ -71,6 +71,16 @@ object Sfx {
         "hit" to ::hit, "fire" to ::fire, "split" to ::split, "rocket" to ::rocket, "quake" to ::quake,
         "meteor" to ::meteor, "grav" to ::grav,
     )
+
+    /** Interface clicks and pings sit under the music; everything else plays at the music's level. */
+    private val quiet = setOf("click", "beep", "split")
+
+    /** Renders a sound at its mix level so effects and music come out equally loud. */
+    fun render(name: String): FloatArray {
+        val gen = all.first { it.first == name }.second
+        val target = if (name in quiet) Mixer.UI_LOUDNESS else Mixer.EFFECT_LOUDNESS
+        return Synth.toLoudness(gen(), target)
+    }
 
     private inline fun fill(sec: Float, f: (t: Double) -> Double): FloatArray {
         val o = Synth.buf(sec)
@@ -441,6 +451,20 @@ object Sfx {
     }
 }
 
+/**
+ * One place for the mix. The music tracks are mastered to roughly the same loudness, and the
+ * player volumes below bring them to [EFFECT_LOUDNESS], the level every effect is rendered at.
+ */
+object Mixer {
+    const val EFFECT_LOUDNESS = 0.16f
+    const val UI_LOUDNESS = 0.09f
+
+    /** Loudest-200 ms level of the rendered tracks, measured once (see AudioTest). */
+    val trackLoudness = mapOf("menu" to 0.343f, "shop" to 0.348f, "battle" to 0.266f)
+
+    fun musicVolume(track: String): Float = (EFFECT_LOUDNESS / (trackLoudness[track] ?: 0.25f)).coerceIn(0.1f, 1f)
+}
+
 /** Plays the looping background music, generated in the background on first launch. */
 class Music(ctx: Context) : MusicPlayer {
     private val dir = File(ctx.cacheDir, "music_v2").also { it.mkdirs() }
@@ -488,7 +512,7 @@ class Music(ctx: Context) : MusicPlayer {
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 setDataSource(f.absolutePath)
                 isLooping = true
-                val v = if (track == "battle") 0.35f else 0.45f
+                val v = Mixer.musicVolume(track)
                 setVolume(v, v)
                 prepare()
                 start()
