@@ -79,6 +79,56 @@ class ScreenshotTest {
         shot(game, "07_battle_wide", 1560, 720)
     }
 
+    private fun battle(game: Game, seed: Long): BattleScene {
+        val m = aiMatch(3, seed)
+        m.players[0].isAI = false
+        m.players[0].name = "Левый"
+        m.players[1].name = "Компьютер"
+        m.players[1].isAI = false
+        val b = BattleScene(game, m)
+        game.go(b)
+        run(game, 3.4f)
+        return b
+    }
+
+    private fun aimAtEnemy(b: BattleScene, w: Weapon) {
+        val me = b.world.tanks[b.turn]
+        val enemy = b.world.tanks[1 - b.turn]
+        val ai = Ai(b.world, me, enemy, 2, 99999, 9, java.util.Random(1), false)
+        while (!ai.think(500)) {}
+        me.aim = ai.plan!!.aim
+        me.power = ai.plan!!.power
+        if (w.thrust > 0f) me.power *= 0.8f
+    }
+
+    @Test
+    fun weapons() {
+        val game = newGame()
+        var b = battle(game, 21L)
+        b.down(0, 150f, 620f); b.up(0, 150f, 620f)
+        run(game, 0.2f)
+        shot(game, "14_arsenal")
+
+        for ((name, id, secs) in listOf(
+            Triple("15_salvo", 5, 1.1f), Triple("16_cluster", 8, 1.9f), Triple("17_nuke", 19, 0f),
+            Triple("18_black_hole", 18, 0f), Triple("19_quake", 15, 0f), Triple("20_frog", 7, 0f),
+        )) {
+            b = battle(game, 21L + id)
+            val w = Weapons.all[id]
+            aimAtEnemy(b, w)
+            b.world.fire(b.world.tanks[b.turn], w)
+            if (secs > 0f) run(game, secs)
+            else {
+                var guard = 0
+                while (b.world.projectiles.isNotEmpty() && guard < 60 * 12) {
+                    game.update(1f / 60f); guard++
+                }
+                run(game, if (id == 18) 1.2f else 0.25f)
+            }
+            shot(game, name)
+        }
+    }
+
     @Test
     fun aiDuel() {
         val game = newGame()

@@ -36,9 +36,10 @@ class NewGameScene(game: Game) : Scene(game) {
         arrows(top + 206, { s.aiLevel = (s.aiLevel + 2) % 3 }, { s.aiLevel = (s.aiLevel + 1) % 3 })
         arrows(top + 262, { s.rounds = cycle(roundOptions, s.rounds, -1) }, { s.rounds = cycle(roundOptions, s.rounds, 1) })
         arrows(top + 318, { s.startMoney = cycle(moneyOptions, s.startMoney, -1) }, { s.startMoney = cycle(moneyOptions, s.startMoney, 1) })
+        arrows(top + 374, { s.turnTime = cycle(Settings.TURN_TIMES, s.turnTime, -1) }, { s.turnTime = cycle(Settings.TURN_TIMES, s.turnTime, 1) })
 
-        buttons.add(Button("Начать", Button.Style.GREEN) { start() }.set(cx - 300, top + 400, cx - 40, top + 456))
-        buttons.add(Button("Отмена", Button.Style.RED) { game.go(MenuScene(game)) }.set(cx + 40, top + 400, cx + 300, top + 456))
+        buttons.add(Button("Начать", Button.Style.GREEN) { start() }.set(cx - 300, top + 456, cx - 40, top + 512))
+        buttons.add(Button("Отмена", Button.Style.RED) { game.go(MenuScene(game)) }.set(cx + 40, top + 456, cx + 300, top + 512))
     }
 
     private fun typeLabel() = if (s.rightIsAI) "ИИ" else "Человек"
@@ -67,19 +68,21 @@ class NewGameScene(game: Game) : Scene(game) {
         game.drawStars(c)
         val cx = vw / 2
         val top = 70f
-        Gfx.screen(c, cx - 420, top, cx + 420, top + 480)
-        Gfx.text(c, "НОВАЯ ИГРА", cx, top + 52, 36f, 0xFFFFFFFF.toInt())
+        Gfx.screen(c, cx - 420, top - 30, cx + 420, top + 536)
+        Gfx.text(c, "НОВАЯ ИГРА", cx, top + 30, 36f, 0xFFFFFFFF.toInt())
         val lx = cx - 390
         Gfx.text(c, "Левый игрок", lx, top + 108, 22f, Player.COLOR_LEFT, Gfx.Align.LEFT)
         Gfx.text(c, "Правый игрок", lx, top + 164, 22f, Player.COLOR_RIGHT, Gfx.Align.LEFT)
         Gfx.text(c, "Сложность ИИ", lx, top + 236, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
         Gfx.text(c, "Раундов", lx, top + 292, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
         Gfx.text(c, "Стартовые деньги", lx, top + 348, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
+        Gfx.text(c, "Время на ход", lx, top + 404, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
         val vx = cx + 80
         Gfx.text(c, "…${levels[s.aiLevel.coerceIn(0, 2)]}…", vx, top + 236, 24f, if (s.rightIsAI) Gfx.YELLOW else Gfx.GREY)
         Gfx.text(c, "${s.rounds}", vx, top + 292, 26f, Gfx.YELLOW)
         Gfx.text(c, "${s.startMoney}", vx, top + 348, 26f, Gfx.YELLOW)
-        Gfx.text(c, "Нажмите на имя, чтобы изменить его", cx, top + 386, 15f, 0xFF90A4AE.toInt())
+        Gfx.text(c, turnLabel(s.turnTime), vx, top + 404, 22f, Gfx.YELLOW)
+        Gfx.text(c, "Нажмите на имя, чтобы изменить его", cx, top + 440, 15f, 0xFF90A4AE.toInt())
         buttons.draw(c)
     }
 }

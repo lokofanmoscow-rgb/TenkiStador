@@ -22,7 +22,8 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
 
     companion object {
         const val PANEL_H = 170f
-        const val MAX_TURNS = 60
+        const val MAX_TURNS = 40
+        const val PLATE_H = 118f
     }
 
     private val snapshot = match.toJson().apply { put("stage", "battle") }
@@ -124,6 +125,13 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
     private lateinit var bExit: Button
 
     private val hintPath = FloatArray(400)
+    // The path of each player's previous shot, drawn faintly while they aim again.
+    private val lastPath = Array(players.size) { FloatArray(600) }
+    private val lastPathN = IntArray(players.size)
+    private var recT = 0f
+    private var recording = -1
+    private var timeScale = 1f
+    private var slowT = 0f
     private val hintCount = IntArray(1)
     private var hintKey = ""
     private val tmp = FloatArray(2)
@@ -184,13 +192,13 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         bAngP.set(cx + 456, panelTop + 122, cx + 494, panelTop + 160)
         bFire.set(cx + 512, panelTop + 26, cx + 618, panelTop + 132)
         bHint.set(cx + 506, panelTop + 136, cx + 624, panelTop + 164)
-        bExit.set(vw - 58, 86f, vw - 14, 130f)
-        bZoomIn.set(vw - 58, 140f, vw - 14, 184f)
-        bZoomOut.set(vw - 58, 194f, vw - 14, 238f)
+        bExit.set(vw - 58, 126f, vw - 14, 170f)
+        bZoomIn.set(vw - 58, 180f, vw - 14, 224f)
+        bZoomOut.set(vw - 58, 234f, vw - 14, 278f)
         // Keep the field below the player plates but let it draw behind them.
-        cam.view.set(0f, 80f, vw, panelTop)
+        cam.view.set(0f, PLATE_H, vw, panelTop)
         cam.clip.set(0f, 0f, vw, panelTop)
-        fit = min(vw / (World.FIELD_W + 100f), (panelTop - 80f) / (World.FIELD_H + 40f))
+        fit = min(vw / (World.FIELD_W + 100f), (panelTop - PLATE_H) / (World.FIELD_H + 40f))
         cam.scale = fit * zoom
         mon.view.set(monRect.left + 4, monRect.top + 4, monRect.right - 4, monRect.bottom - 4)
         mon.scale = fit * 4.2f
@@ -257,8 +265,16 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         when (w.kind) {
             WeaponKind.REPAIR -> game.sound.play("repair")
             WeaponKind.SHIELD -> game.sound.play("tele", 0.8f, 1.4f)
-            else -> game.sound.play("shot", 1f, if (w.id == 9) 0.7f else 1f)
+            WeaponKind.ROCKETS, WeaponKind.HOMING -> game.sound.play("rocket")
+            WeaponKind.NUKE, WeaponKind.GRAVITY -> game.sound.play("shot", 1f, 0.7f)
+            else -> game.sound.play("shot", 1f, if (w.damage > 30f) 0.85f else 1f)
         }
+        if (!w.instant) {
+            recording = turn
+            lastPathN[turn] = 0
+            recT = 0f
+        }
+        if (tank.gun <= 0f && !w.instant) showBanner("Пушка сломана!", "снаряд еле вылетает", 1.4f, Gfx.RED)
         lostShown = false
         setState(St.FLIGHT)
     }
@@ -394,12 +410,20 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
                             Part.GUN -> t.gun to t.gunMax; Part.ANTENNA -> t.antenna to t.antennaMax
                             Part.TRACKS -> t.tracks to t.tracksMax; Part.HULL -> t.hull to t.hullMax
                         }
-                        monLine = "${players[ev.tank].name}: ${part.title} ${v.roundToInt()}/${m.roundToInt()}"
+                        monLine = "${players[ev.tank].name}: ${part.title.lowercase()} ${v.roundToInt()}/${m.roundToInt()}" +
+                            if (v <= 0f) " — СЛОМАНО" else ""
                         monLineT = 2.5f
+                        if (v <= 0f && ev.partDmg > 0f) {
+                            val what = when (part) {
+                                Part.GUN -> "пушка сломана"; Part.TRACKS -> "гусеницы разбиты"; Part.ANTENNA -> "антенна сбита"; Part.HULL -> ""
+                            }
+                            showBanner(players[ev.tank].name + ": " + what, "", 1.6f, Gfx.RED)
+                        }
                     }
                 }
                 is Ev.Killed -> {
-                    if (ev.by == ev.tank) {
+                    slowT = 1.4f
+                    if (ev.by == ev.tank || ev.by < 0) {
                         players[ev.tank].rSuicide = true
                         showBanner("Самоподрыв!", players[ev.tank].name + " перестарался", 2f, Gfx.RED)
                     } else if (ev.by in players.indices) {
@@ -432,6 +456,28 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
                 }
                 is Ev.FireStart -> game.sound.play("fire")
                 is Ev.Burn -> game.sound.play("fire", 0.6f)
+                is Ev.Rocket -> game.sound.play("rocket", 0.8f)
+                is Ev.MineLaid -> {
+                    game.sound.play("beep", 0.6f, 1.4f)
+                    monLine = "Мины поставлены"; monLineT = 2f
+                }
+                is Ev.Quake -> {
+                    game.sound.play("quake")
+                    shake = max(shake, 12f)
+                }
+                is Ev.MeteorIncoming -> {
+                    game.sound.play("meteor")
+                    showBanner("Звездопад!", "метеориты на подлёте", 1.5f, 0xFFFFAB40.toInt())
+                }
+                is Ev.BlackHole -> {
+                    game.sound.play("grav")
+                    showBanner("Чёрная дыра!", "", 1.3f, 0xFFB388FF.toInt())
+                }
+                is Ev.Thrown -> {
+                    showBanner("${players[ev.tank].name} летит!", "взрывом сорвало с грунта", 1.6f, players[ev.tank].color)
+                }
+                is Ev.Landed -> if (ev.dmg > 0f) game.sound.play("hit", 0.8f, 0.7f)
+                is Ev.AsteroidBroken -> game.sound.play("boom", 0.5f, 1.3f)
                 else -> {}
             }
         }
@@ -454,7 +500,7 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
 
     private fun showWeaponInfo() {
         val w = Weapons.all[weaponIdx[turn]]
-        monInfo = w.name + "\n" + (if (w.price == 0) "бесплатно" else "цена ${w.price}") +
+        monInfo = w.name + "\n" + "тип: ${w.type}, " + (if (w.price == 0) "бесплатно" else "цена ${w.price}") +
             (if (w.damage > 0) ", урон ${w.damage.roundToInt()}" else "") + "\n" + w.desc
         monInfoT = 5f
     }
@@ -484,11 +530,11 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
 
     private fun buildPicker() {
         picker.clear()
-        val cols = 4
-        val cw = 214f; val ch = 92f
+        val cols = 6
+        val cw = 196f; val ch = 112f
         val w = cols * cw + (cols - 1) * 10
         val left = vw / 2 - w / 2
-        val top = 96f
+        val top = 100f
         for ((i, wp) in Weapons.all.withIndex()) {
             val col = i % cols; val row = i / cols
             val b = Button(wp.name, Button.Style.FLAT) {
@@ -499,7 +545,7 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
             b.set(left + col * (cw + 10), top + row * (ch + 10), left + col * (cw + 10) + cw, top + row * (ch + 10) + ch)
             picker.add(b)
         }
-        picker.add(Button("✕", Button.Style.RED) { pickerOpen = false }.set(left + w - 50, 40f, left + w, 84f))
+        picker.add(Button("✕", Button.Style.RED) { pickerOpen = false }.set(left + w - 50, 42f, left + w, 86f))
     }
 
     // ------------------------------------------------------------------ update
@@ -516,30 +562,58 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         buttons.update(dt)
         val human = humanTurn
         bWPrev.enabled = human; bWNext.enabled = human; bInfo.enabled = st == St.AIM
-        bLeft.enabled = human && tank.fuel > 0f && tank.tracks > 0f
+        bLeft.enabled = human && tank.fuel > 0f && tank.tracks > 0f && !tank.air
         bRight.enabled = bLeft.enabled
         bPowM.enabled = human; bPowP.enabled = human; bAngM.enabled = human; bAngP.enabled = human
         bFire.enabled = human && Weapons.all[weaponIdx[turn]].price <= player.money
         bHint.selected = hintOn
         bHint.label = if (hintOn) "ПОДСКАЗКА ✓" else "ПОДСКАЗКА"
 
-        world.update(dt)
+        if (slowT > 0f) slowT -= dt
+        timeScale += ((if (slowT > 0f) 0.35f else 1f) - timeScale) * min(1f, dt * 6f)
+        world.update(dt * timeScale)
         processEvents()
+        recordShot(dt * timeScale)
         renderer.movingTank = -1
 
         when (st) {
             St.INTRO -> if (stT > 2.2f) startTurn()
             St.TURN -> if (stT > 0.9f) setState(St.AIM)
             St.AIM -> if (player.isAI) updateAi(dt) else updateHuman(dt)
-            St.FLIGHT -> if (!world.busy && stT > 0.3f) setState(St.SETTLE)
+            St.FLIGHT -> if (!world.busy && stT > 0.3f) {
+                recording = -1
+                setState(St.SETTLE)
+            }
             St.SETTLE -> if (stT > 0.9f || (stT > 0.4f && world.particles.size < 30)) afterShot()
             St.ROUND_END, St.PROMO -> {}
         }
         updateCamera(dt)
     }
 
+    private fun recordShot(dt: Float) {
+        val who = recording
+        if (who < 0) return
+        val lead = world.projectiles.firstOrNull { !it.sub } ?: return
+        recT += dt
+        if (recT < 0.04f) return
+        recT = 0f
+        val n = lastPathN[who]
+        if (n * 2 + 1 < lastPath[who].size) {
+            lastPath[who][n * 2] = lead.x
+            lastPath[who][n * 2 + 1] = lead.y
+            lastPathN[who] = n + 1
+        }
+    }
+
     private fun updateHuman(dt: Float) {
         val dir = if (bLeft.isHeld) -1 else if (bRight.isHeld) 1 else 0
+        if (dir != 0 && tank.tracks <= 0f) {
+            monLine = "Гусеницы разбиты — танк не едет"
+            monLineT = 1f
+        } else if (dir != 0 && tank.fuel <= 0f) {
+            monLine = "Бак пуст"
+            monLineT = 1f
+        }
         if (dir != 0 && world.moveTank(tank, dir, dt)) {
             renderer.movingTank = turn
             moveSoundT -= dt
@@ -605,11 +679,18 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
     private fun updateCamera(dt: Float) {
         var tx: Float; var ty: Float; var tz: Float
         val lead = world.projectiles.firstOrNull { !it.sub } ?: world.projectiles.firstOrNull()
+        val flyer = world.tanks.firstOrNull { it.air }
+        val hole = world.holes.firstOrNull()
         when {
             manual -> { tx = manX; ty = manY; tz = manZoom }
+            hole != null && game.settings.follow -> { tx = hole.x; ty = hole.y; tz = 1.8f }
+            flyer != null && game.settings.follow -> { tx = flyer.x; ty = flyer.y; tz = 1.5f }
             focusT > 0f -> { tx = focusX; ty = focusY; tz = 1.7f }
             st == St.FLIGHT && game.settings.follow && lead != null -> {
-                tx = lerp(0f, lead.x, 0.55f); ty = lerp(0f, lead.y, 0.55f); tz = 1.25f
+                var ax = 0f; var ay = 0f
+                for (p in world.projectiles) { ax += p.x; ay += p.y }
+                ax /= world.projectiles.size; ay /= world.projectiles.size
+                tx = lerp(0f, ax, 0.55f); ty = lerp(0f, ay, 0.55f); tz = 1.25f
             }
             else -> { tx = 0f; ty = 0f; tz = 1f }
         }
@@ -625,8 +706,12 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         // The monitor follows whatever is flying, otherwise the active tank.
         val mole = world.moles.firstOrNull()
         val mt = world.tanks.getOrNull(turn)
+        val call = world.meteorCalls.firstOrNull()
         val (mx, my) = when {
+            hole != null -> hole.x to hole.y
+            flyer != null -> flyer.x to flyer.y
             lead != null -> lead.x to lead.y
+            call != null -> call.x to call.y
             mole != null -> mole.x to mole.y
             mt != null -> (mt.x + cos(mt.normal) * 8f) to (mt.y + sin(mt.normal) * 8f)
             else -> 0f to 0f
@@ -774,6 +859,11 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         c.translate(sx, sy)
         renderer.draw(c, cam, game.time, false) { cc -> drawAimOverlay(cc) }
         c.restore()
+        if (world.flash > 0f) {
+            Gfx.fill.shader = null
+            Gfx.fill.color = Gfx.withAlpha(0xFFFFF8E1.toInt(), (min(1f, world.flash / 0.6f) * 170).toInt())
+            c.drawRect(0f, 0f, vw, panelTop, Gfx.fill)
+        }
         drawTopHud(c)
         drawBanner(c)
         drawPanel(c)
@@ -788,6 +878,13 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         val t = world.tanks.getOrNull(turn) ?: return
         if (!t.alive) return
         val px = 1f / cam.scale
+        val ln = lastPathN[turn]
+        if (ln > 1 && !player.isAI) {
+            val f = Gfx.fill
+            f.shader = null
+            f.color = Gfx.withAlpha(t.color, 90)
+            for (i in 0 until ln step 2) c.drawCircle(lastPath[turn][i * 2], lastPath[turn][i * 2 + 1], 1.3f * px, f)
+        }
         world.muzzleFor(t, t.aim, tmp)
         val a = t.aimWorld()
         val len = 20f + t.power * 0.9f
@@ -798,11 +895,11 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         c.drawLine(tmp[0], tmp[1], tmp[0] + cos(a) * len, tmp[1] + sin(a) * len, p)
         p.pathEffect = null
         if (!player.isAI && hintOn && t.antenna > 0f) {
-            val key = "${t.aim}|${t.power}|${t.x}|${t.y}|${world.planets.sumOf { it.version }}"
+            val key = "${t.aim}|${t.power}|${t.x}|${t.y}|${world.planets.sumOf { it.version }}|${weaponIdx[turn]}"
             if (key != hintKey) {
                 hintKey = key
                 val secs = 0.35f + 1.5f * (t.antenna / t.antennaMax)
-                world.simulate(t, t.aim, t.power, null, secs, hintPath, hintCount)
+                world.simulate(t, t.aim, t.power, null, secs, hintPath, hintCount, Weapons.all[weaponIdx[turn]])
             }
             val f = Gfx.fill
             f.shader = null
@@ -819,17 +916,30 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         for (i in players.indices) {
             val p = players[i]
             val t = world.tanks[i]
-            val l = if (i == 0) 12f else vw - 332f
-            val r = l + 320f
+            val l = if (i == 0) 10f else vw - 350f
+            val r = l + 340f
             val active = i == turn && st in setOf(St.TURN, St.AIM, St.FLIGHT, St.SETTLE)
-            Gfx.rr(c, l, 10f, r, 74f, 12f, 0xCC0C1418.toInt())
-            Gfx.rrStroke(c, l, 10f, r, 74f, 12f, if (active) p.color else 0xFF37474F.toInt(), if (active) 3f else 2f)
-            Gfx.text(c, p.name, l + 14, 36f, 21f, p.color, Gfx.Align.LEFT)
-            Gfx.text(c, Ranks.names[p.rank] + if (p.isAI) " · ИИ" else "", r - 12, 34f, 14f, 0xFFB0BEC5.toInt(), Gfx.Align.RIGHT)
-            val f = t.hull / t.hullMax
-            Gfx.bar(c, l + 14, 46f, r - 14, 64f, f, Gfx.healthColor(f))
-            Gfx.text(c, "${t.hull.roundToInt()}/${t.hullMax.roundToInt()}" + if (t.shield > 0) "  ⛨ ${t.shield.roundToInt()}" else "",
-                (l + r) / 2, 60f, 13f, 0xFFFFFFFF.toInt())
+            Gfx.rr(c, l, 8f, r, 112f, 12f, 0xCC0C1418.toInt())
+            Gfx.rrStroke(c, l, 8f, r, 112f, 12f, if (active) p.color else 0xFF37474F.toInt(), if (active) 3f else 2f)
+            Gfx.text(c, p.name, l + 12, 31f, 20f, p.color, Gfx.Align.LEFT)
+            Gfx.text(c, Ranks.names[p.rank] + if (p.isAI) " · ИИ" else "", r - 10, 29f, 13f, 0xFFB0BEC5.toInt(), Gfx.Align.RIGHT)
+            drawSchematic(c, t, l + 12, 40f, 76f, 64f)
+            val bl = l + 98; val br = r - 10
+            val rows = listOf(
+                Triple("КОРПУС", t.hull, t.hullMax), Triple("ПУШКА", t.gun, t.gunMax),
+                Triple("ГУСЕНИЦЫ", t.tracks, t.tracksMax), Triple("АНТЕННА", t.antenna, t.antennaMax),
+            )
+            for ((k, row) in rows.withIndex()) {
+                val y = 40f + k * 17f
+                val f = (row.second / row.third).coerceIn(0f, 1f)
+                Gfx.bar(c, bl, y, br, y + 14f, f, if (row.second <= 0f) 0xFF424242.toInt() else Gfx.healthColor(f))
+                val txt = if (row.second <= 0f) "${row.first}: СЛОМАНО" else "${row.first} ${row.second.roundToInt()}/${row.third.roundToInt()}"
+                Gfx.text(c, txt, (bl + br) / 2, y + 11.5f, 11f, if (row.second <= 0f) 0xFFFF8A80.toInt() else 0xFFFFFFFF.toInt())
+            }
+            if (t.shield > 0f) {
+                val sf = (t.shield / 40f).coerceIn(0f, 1f)
+                Gfx.rr(c, bl, 40f, bl + (br - bl) * sf, 54f, 7f, 0x6640C4FF)
+            }
         }
         val score = players.joinToString(" : ") { it.roundWins.toString() }
         Gfx.text(c, score, vw / 2, 48f, 36f, 0xFFFFFFFF.toInt())
@@ -843,6 +953,41 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
             val col = if (i == turn && st == St.AIM) Gfx.GREEN else 0xFFB0BEC5.toInt()
             Gfx.text(c, "${p.money} монет", x, panelTop - 8, 20f, col)
         }
+    }
+
+    /** Side view of the tank with every part tinted by how damaged it is. */
+    private fun drawSchematic(c: Canvas, t: Tank, l: Float, top: Float, w: Float, h: Float) {
+        Gfx.rr(c, l, top, l + w, top + h, 8f, 0xFF061014.toInt())
+        Gfx.rrStroke(c, l, top, l + w, top + h, 8f, 0xFF263238.toInt(), 1.5f)
+        fun col(f: Float, broken: Boolean) = if (broken) 0xFF37474F.toInt() else Gfx.healthColor(f)
+        val f = Gfx.fill
+        f.shader = null
+        val cx = l + w / 2; val by = top + h - 12
+        // Tracks.
+        f.color = col(t.tracks / t.tracksMax, t.tracks <= 0f)
+        Gfx.rr(c, cx - 30, by - 4, cx + 30, by + 8, 6f, f.color)
+        f.color = 0xFF0B1418.toInt()
+        for (k in 0 until 5) c.drawCircle(cx - 24 + k * 12f, by + 2, 3f, f)
+        // Hull.
+        f.color = col(t.hull / t.hullMax, t.hull <= 0f)
+        val hp = android.graphics.Path()
+        hp.moveTo(cx - 30, by - 4); hp.lineTo(cx - 24, by - 16); hp.lineTo(cx + 24, by - 16); hp.lineTo(cx + 30, by - 4); hp.close()
+        c.drawPath(hp, f)
+        // Turret and gun.
+        val gc = col(t.gun / t.gunMax, t.gun <= 0f)
+        f.color = gc
+        c.drawCircle(cx + 2, by - 18, 8f, f)
+        Gfx.stroke.color = gc; Gfx.stroke.strokeWidth = 4f
+        val gl = if (t.gun <= 0f) 8f else 22f
+        c.drawLine(cx + 6, by - 20, cx + 6 + gl * 0.9f, by - 20 - gl * 0.45f, Gfx.stroke)
+        // Antenna.
+        val ac = col(t.antenna / t.antennaMax, t.antenna <= 0f)
+        Gfx.stroke.color = ac; Gfx.stroke.strokeWidth = 2.5f
+        if (t.antenna <= 0f) c.drawLine(cx - 18, by - 16, cx - 24, by - 22, Gfx.stroke)
+        else c.drawLine(cx - 18, by - 16, cx - 20, by - 44, Gfx.stroke)
+        f.color = ac
+        if (t.antenna > 0f) c.drawCircle(cx - 20, by - 45, 3f, f)
+        if (!t.alive) Gfx.text(c, "✕", cx, top + h / 2 + 10, 34f, Gfx.RED)
     }
 
     private fun drawBanner(c: Canvas) {
@@ -894,13 +1039,15 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         Gfx.rr(c, ovalRect.left + 30, ovalRect.centerY() - 20, ovalRect.right - 30, ovalRect.centerY() + 8, 6f, 0xFF283593.toInt())
         Gfx.text(c, w.name, ovalRect.centerX(), ovalRect.centerY() + 1, 21f, 0xFFFFFFFF.toInt())
         val affordable = w.price <= player.money
-        Gfx.text(c, if (w.price == 0) "бесплатно" else "${w.price} монет", ovalRect.centerX(), ovalRect.centerY() + 28, 15f,
+        Gfx.text(c, (if (w.price == 0) "бесплатно" else "${w.price} монет") + " · " + w.type, ovalRect.centerX(), ovalRect.centerY() + 28, 14f,
             if (affordable) 0xFFFFE082.toInt() else Gfx.RED)
+        if (t0().gun <= 0f) Gfx.text(c, "ПУШКА СЛОМАНА", bFire.rect.centerX(), bFire.rect.top - 2, 12f, Gfx.RED)
         if (humanTurn) Gfx.text(c, "нажмите для списка", ovalRect.centerX(), ovalRect.top + 18, 11f, 0xAAFFFFFF.toInt(), shadow = false)
 
         // Fuel.
         val t = world.tanks[turn]
-        Gfx.lcd(c, cx - 332, panelTop + 108, cx - 158, panelTop + 136, String.format("%05.1f", t.fuel))
+        if (t.tracks <= 0f) Gfx.lcd(c, cx - 332, panelTop + 108, cx - 158, panelTop + 136, "НЕ ЕДЕТ", Gfx.RED, 17f)
+        else Gfx.lcd(c, cx - 332, panelTop + 108, cx - 158, panelTop + 136, String.format("%05.1f", t.fuel))
         Gfx.text(c, "топливо", cx - 245, panelTop + 155, 13f, 0xFFECEFF1.toInt())
 
         // Knobs.
@@ -912,6 +1059,8 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         drawMonitor(c)
         for (b in buttons.list) if (b !== bExit && b !== bZoomIn && b !== bZoomOut) b.draw(c)
     }
+
+    private fun t0() = world.tanks[turn]
 
     private fun drawKnob(c: Canvas, x: Float, y: Float, r: Float, pointerDeg: Float, color: Int, dial: Boolean) {
         val f = Gfx.fill
@@ -991,7 +1140,7 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         }
         if (game.settings.turnTime > 0 && st == St.AIM && !player.isAI) {
             val sec = max(0, turnTimer.toInt())
-            Gfx.text(c, String.format("00:%02d", sec), m.centerX(), m.bottom - 8, 15f, if (sec <= 5) Gfx.RED else 0xFFFFFFFF.toInt(), font = Gfx.mono)
+            Gfx.text(c, String.format("%d:%02d", sec / 60, sec % 60), m.centerX(), m.bottom - 8, 15f, if (sec <= 5) Gfx.RED else 0xFFFFFFFF.toInt(), font = Gfx.mono)
         }
         // Scanlines.
         Gfx.fill.color = 0x22000000
@@ -1013,10 +1162,10 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         dim(c)
         val first = picker.list.first().rect
         val last = picker.list[Weapons.all.size - 1].rect
-        val l = first.left - 20; val r = picker.list[3].rect.right + 20
+        val l = first.left - 20; val r = picker.list[5].rect.right + 20
         Gfx.screen(c, l, 30f, r, last.bottom + 20, Gfx.YELLOW)
-        Gfx.text(c, "ВЫБОР ОРУЖИЯ", l + 24, 70f, 28f, Gfx.YELLOW, Gfx.Align.LEFT)
-        Gfx.text(c, "Деньги: ${player.money}", r - 70, 70f, 20f, Gfx.GREEN, Gfx.Align.RIGHT)
+        Gfx.text(c, "АРСЕНАЛ", l + 24, 72f, 28f, Gfx.YELLOW, Gfx.Align.LEFT)
+        Gfx.text(c, "Деньги: ${player.money}", r - 70, 72f, 20f, Gfx.GREEN, Gfx.Align.RIGHT)
         for ((i, b) in picker.list.withIndex()) {
             if (i >= Weapons.all.size) { b.draw(c); continue }
             val w = Weapons.all[i]
@@ -1026,12 +1175,13 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
             Gfx.rr(c, rc.left, rc.top, rc.right, rc.bottom, 10f, if (b.pressed) 0xFF37474F.toInt() else 0xFF1C2A30.toInt())
             Gfx.rrStroke(c, rc.left, rc.top, rc.right, rc.bottom, 10f, if (sel) Gfx.GREEN else 0xFF455A64.toInt(), if (sel) 3f else 1.5f)
             Gfx.fill.color = w.color
-            c.drawCircle(rc.left + 18, rc.top + 22, 7f, Gfx.fill)
-            Gfx.text(c, w.name, rc.left + 32, rc.top + 28, 18f, if (ok) 0xFFFFFFFF.toInt() else 0xFF757575.toInt(), Gfx.Align.LEFT)
-            Gfx.text(c, if (w.price == 0) "даром" else "${w.price}", rc.right - 10, rc.top + 27, 16f, if (ok) Gfx.YELLOW else Gfx.RED, Gfx.Align.RIGHT)
-            val lines = Gfx.wrap(w.desc, rc.width() - 20, 12f)
-            for ((k, line) in lines.take(3).withIndex()) {
-                Gfx.text(c, line, rc.left + 10, rc.top + 48 + k * 14, 12f, 0xFFB0BEC5.toInt(), Gfx.Align.LEFT, shadow = false)
+            c.drawCircle(rc.left + 14, rc.top + 20, 6f, Gfx.fill)
+            Gfx.text(c, w.name, rc.left + 26, rc.top + 26, 17f, if (ok) 0xFFFFFFFF.toInt() else 0xFF757575.toInt(), Gfx.Align.LEFT)
+            Gfx.text(c, if (w.price == 0) "даром" else "${w.price}", rc.right - 8, rc.top + 26, 15f, if (ok) Gfx.YELLOW else Gfx.RED, Gfx.Align.RIGHT)
+            Gfx.text(c, w.type + if (w.damage > 0) " · урон ${w.damage.roundToInt()}" else "", rc.left + 10, rc.top + 45, 12f, 0xFF80CBC4.toInt(), Gfx.Align.LEFT, shadow = false)
+            val lines = Gfx.wrap(w.desc, rc.width() - 16, 11.5f)
+            for ((k, line) in lines.take(4).withIndex()) {
+                Gfx.text(c, line, rc.left + 8, rc.top + 62 + k * 13, 11.5f, 0xFFB0BEC5.toInt(), Gfx.Align.LEFT, shadow = false)
             }
         }
     }

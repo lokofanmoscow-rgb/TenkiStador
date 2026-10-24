@@ -54,10 +54,10 @@ class LogicTest {
     @Test
     fun carvingDigsACraterButKeepsTheCore() {
         val p = Planet(0, 0f, 0f, 100f, 1f, 0, 0)
-        assertTrue(p.carve(0f, -100f, 30f))
-        assertTrue(p.surfaceAt(-Math.PI.toFloat() / 2) < 75f)
-        assertEquals(100f, p.surfaceAt(Math.PI.toFloat() / 2), 0.01f)
-        repeat(30) { p.carve(0f, 0f, 200f) }
+        assertTrue(p.carve(0f, -100f, 30f, Random(2)))
+        assertTrue(p.surfaceAt(-Math.PI.toFloat() / 2) < 80f)
+        assertEquals(100f, p.surfaceAt(Math.PI.toFloat() / 2), 0.5f)
+        repeat(30) { p.carve(0f, 0f, 200f, Random(it.toLong())) }
         assertTrue(p.surfaceAt(0f) >= p.minR - 0.01f)
     }
 
@@ -78,7 +78,7 @@ class LogicTest {
         while (!ai.think(200)) guard++
         val plan = ai.plan
         assertNotNull(plan)
-        val r = w.simulate(w.tanks[1], plan!!.aim, plan.power, w.tanks[0], 9f)
+        val r = w.simulate(w.tanks[1], plan!!.aim, plan.power, w.tanks[0], 9f, w = plan.weapon)
         val d = if (r.hitTank == 0) 0f else hypot(r.x - w.tanks[0].x, r.y - w.tanks[0].y)
         assertTrue("ace computer should land close, was $d", d < 80f)
     }
@@ -95,6 +95,87 @@ class LogicTest {
         w.explode(target.x, target.y, 30f, 40f, 1, target, true)
         assertFalse(target.alive)
         assertTrue(w.events.any { it is Ev.Killed && it.tank == 0 && it.by == 1 })
+    }
+
+    @Test
+    fun blastHurtsThePartItLandsNextTo() {
+        val below = twoPlanetWorld()
+        val t1 = below.tanks[0]
+        val out = FloatArray(2)
+        t1.local(0f, 9f, out)
+        below.explode(out[0], out[1], 14f, 20f, 1, null, false)
+        val tracksLost = t1.tracksMax - t1.tracks
+        val antennaLost = t1.antennaMax - t1.antenna
+        assertTrue("tracks $tracksLost vs antenna $antennaLost", tracksLost > antennaLost * 2)
+
+        val above = twoPlanetWorld()
+        val t2 = above.tanks[0]
+        t2.local(-9f, -14f, out)
+        above.explode(out[0], out[1], 14f, 20f, 1, null, false)
+        assertTrue((t2.antennaMax - t2.antenna) > (t2.tracksMax - t2.tracks) * 2)
+        assertTrue("hull always takes a share", t2.hull < t2.hullMax)
+    }
+
+    @Test
+    fun brokenPartsDisableTheTank() {
+        val w = twoPlanetWorld()
+        val t = w.tanks[0]
+        t.gun = 0f
+        assertEquals(World.MAX_SPEED * 0.2f, t.maxSpeed(), 0.01f)
+        t.tracks = 0f
+        assertFalse(w.moveTank(t, 1, 0.1f))
+        val r = w.simulate(t, 60f, 100f, null, 10f)
+        assertTrue("a broken gun cannot reach far", hypot(r.x - t.x, r.y - t.y) < 120f)
+    }
+
+    @Test
+    fun bigBlastThrowsTheTankWhichLandsAgain() {
+        val w = twoPlanetWorld()
+        val t = w.tanks[0]
+        t.hull = 5000f; t.hullMax = 5000f
+        val out = FloatArray(2)
+        t.local(6f, 10f, out)
+        w.explode(out[0], out[1], 88f, 70f, 1, null, false)
+        assertTrue("tank should be airborne", t.air)
+        var steps = 0
+        while (t.air && steps < 60 * 15) { w.update(1f / 60f); steps++ }
+        assertFalse(t.air)
+        assertTrue(t.alive)
+    }
+
+    @Test
+    fun cratersAreIrregularAndPlanetsLoseMass() {
+        val p = Planet(0, 0f, 0f, 100f, 1f, 0, 0)
+        val before = p.mass
+        assertTrue(p.carve(0f, -100f, 35f, Random(1)))
+        assertTrue(p.mass < before)
+        assertTrue("rim is pushed up", p.r.max() > 100f)
+        assertTrue(p.cracks.isNotEmpty())
+        assertTrue(p.heat.max() > 0.5f)
+    }
+
+    @Test
+    fun multiStageWeaponsExplodeSeveralTimes() {
+        fun explosions(id: Int): Int {
+            val w = twoPlanetWorld()
+            val t = w.tanks[0]
+            t.aim = 70f; t.power = if (Weapons.all[id].thrust > 0f) 30f else 45f
+            w.fire(t, Weapons.all[id])
+            var n = 0
+            var steps = 0
+            while ((w.busy || steps < 5) && steps < 60 * 30) {
+                w.update(1f / 60f)
+                n += w.events.count { it is Ev.Explosion }
+                w.events.clear()
+                steps++
+            }
+            return n
+        }
+        assertTrue(explosions(7) >= 3) // Лягушка
+        assertTrue(explosions(15) >= 9) // Сейсмобомба
+        assertTrue(explosions(8) >= 6) // Кассета
+        assertTrue(explosions(5) >= 4) // Ливень
+        assertTrue(explosions(10) >= 4) // Арбуз
     }
 
     @Test

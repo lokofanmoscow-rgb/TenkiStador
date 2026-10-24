@@ -23,7 +23,7 @@ class Sound(ctx: Context) {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
             val sp = SoundPool.Builder().setMaxStreams(10).setAudioAttributes(attrs).build()
-            val dir = File(ctx.cacheDir, "sfx_v1")
+            val dir = File(ctx.cacheDir, "sfx_v2")
             dir.mkdirs()
             for ((name, gen) in generators()) {
                 val f = File(dir, "$name.wav")
@@ -71,6 +71,10 @@ class Sound(ctx: Context) {
             "fire" to { crackle() },
             "repair" to { notes(floatArrayOf(660f, 880f, 990f), 0.07f, 0.35f) },
             "split" to { sweep(0.15f, 1200f, 500f, 0.4f) },
+            "rocket" to { rocket() },
+            "quake" to { boom(1.6f, 0.25f) },
+            "meteor" to { sweep(1.0f, 1800f, 300f, 0.35f) },
+            "grav" to { sweep(1.4f, 900f, 60f, 0.5f) },
         )
 
         private fun buf(sec: Float) = FloatArray((sec * RATE).toInt())
@@ -139,6 +143,19 @@ class Sound(ctx: Context) {
                     val sq = if (s > 0) 0.35f else -0.35f
                     o[idx] += (s * 0.6f + sq * 0.4f) * vol * exp(-t * 7f)
                 }
+            }
+            return o
+        }
+
+        private fun rocket(): FloatArray {
+            val o = buf(0.7f)
+            val r = Random(4)
+            var lp = 0f
+            for (i in o.indices) {
+                val t = i / RATE.toFloat()
+                lp += (r.nextFloat() * 2 - 1 - lp) * (0.08f + 0.3f * t)
+                val env = (if (t < 0.05f) t / 0.05f else 1f) * exp(-t * 3f)
+                o[i] = lp * 1.6f * env
             }
             return o
         }

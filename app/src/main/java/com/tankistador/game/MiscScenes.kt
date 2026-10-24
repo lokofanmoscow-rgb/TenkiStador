@@ -49,6 +49,13 @@ class RecordsScene(game: Game) : Scene(game) {
     }
 }
 
+fun turnLabel(sec: Int) = when {
+    sec == 0 -> "Без ограничения"
+    sec < 60 -> "$sec секунд"
+    sec % 60 == 0 -> "${sec / 60} мин."
+    else -> "${sec / 60} мин. ${sec % 60} сек."
+}
+
 class SettingsScene(game: Game) : Scene(game) {
     private val s = game.settings
     private var confirmReset = false
@@ -66,8 +73,9 @@ class SettingsScene(game: Game) : Scene(game) {
             buttons.add(b)
         }
         row(0, { if (s.sound) "Включён" else "Выключен" }) { s.sound = !s.sound }
-        row(1, { if (s.turnTime == 0) "Без ограничения" else "${s.turnTime} секунд" }) {
-            s.turnTime = when (s.turnTime) { 30 -> 45; 45 -> 60; 60 -> 0; else -> 30 }
+        row(1, { turnLabel(s.turnTime) }) {
+            val opts = Settings.TURN_TIMES
+            s.turnTime = opts[(opts.indexOf(s.turnTime).coerceAtLeast(0) + 1) % opts.size]
         }
         row(2, { if (s.hints) "Показывать" else "Скрывать" }) { s.hints = !s.hints }
         row(3, { if (s.follow) "Следить" else "Общий план" }) { s.follow = !s.follow }
