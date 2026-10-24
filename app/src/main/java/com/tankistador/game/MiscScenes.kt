@@ -127,7 +127,7 @@ class MatchOverScene(game: Game, val match: Match) : Scene(game) {
         game.store.clearSave()
     }
 
-    override fun enter() = game.sound.play("fanfare")
+    override fun enter() = game.sound.play("victory", 0.8f)
 
     override fun layout() {
         buttons.clear()

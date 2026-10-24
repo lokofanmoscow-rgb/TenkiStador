@@ -208,7 +208,7 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
 
     override fun enter() {
         showBanner("Раунд ${match.round}", "из ${match.totalRounds}", 2.2f, Gfx.YELLOW)
-        game.sound.play("fanfare", 0.7f)
+        game.sound.play("fanfare", 0.6f)
         renderer.activeTank = -1
     }
 
@@ -352,7 +352,7 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         setState(St.ROUND_END)
         if (winner >= 0) {
             showBanner("${players[winner].name} побеждает!", "Раунд окончен", 3f, players[winner].color)
-            game.sound.play("fanfare")
+            game.sound.play("victory", 0.8f)
         } else {
             showBanner("Ничья!", "Раунд окончен", 3f, Gfx.YELLOW)
             game.sound.play("lose")

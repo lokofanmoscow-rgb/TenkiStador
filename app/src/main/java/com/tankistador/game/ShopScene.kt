@@ -90,7 +90,7 @@ class ShopScene(game: Game, val match: Match, val idx: Int) : Scene(game) {
             p.rank < m.minRank -> showToast("Нужно звание: ${Ranks.names[m.minRank]}")
             p.money < p.upgradeCost(sel) -> showToast("Не хватает денег")
             p.buy(sel) -> {
-                game.sound.play("fanfare", 0.7f)
+                game.sound.play("victory", 0.6f)
                 game.store.saveMatch(match)
                 toast = "Поздравляем с покупкой!"; toastT = 2f
             }

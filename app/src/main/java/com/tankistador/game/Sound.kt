@@ -26,8 +26,8 @@ class Sound(ctx: Context) {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
             val sp = SoundPool.Builder().setMaxStreams(12).setAudioAttributes(attrs).build()
-            for (old in 1..3) File(ctx.cacheDir, "sfx_v$old").deleteRecursively()
-            val dir = File(ctx.cacheDir, "sfx_v4")
+            for (old in 1..4) File(ctx.cacheDir, "sfx_v$old").deleteRecursively()
+            val dir = File(ctx.cacheDir, "sfx_v5")
             dir.mkdirs()
             for ((name, gen) in Sfx.all) {
                 val f = File(dir, "$name.wav")
@@ -67,7 +67,7 @@ object Sfx {
     val all: List<Pair<String, () -> FloatArray>> = listOf(
         "click" to ::click, "beep" to ::beep, "shot" to ::shot, "boom" to { boom(1.8f, 1.0) },
         "bigboom" to { boom(3.2f, 0.6) }, "bounce" to ::bounce, "move" to ::engine, "tele" to ::tele,
-        "fanfare" to ::fanfare, "promo" to ::promo, "lose" to ::lose, "cash" to ::cash, "repair" to ::repair,
+        "fanfare" to ::fanfare, "victory" to ::victory, "promo" to ::promo, "lose" to ::lose, "cash" to ::cash, "repair" to ::repair,
         "hit" to ::hit, "fire" to ::fire, "split" to ::split, "rocket" to ::rocket, "quake" to ::quake,
         "meteor" to ::meteor, "grav" to ::grav,
     )
@@ -246,16 +246,54 @@ object Sfx {
         return Synth.normalize(room(o, 0.5, 0.85), 0.5f)
     }
 
-    /** Round start: war drums and a low horn. */
+    /** Soft sine-based pad note: no sharp edges, just a slow swell. */
+    private fun softPad(o: FloatArray, start: Double, dur: Double, notes: IntArray, vol: Double, attack: Double) {
+        val ph = DoubleArray(notes.size * 2)
+        val lp = Synth.LowPass(900.0)
+        add(o, start, dur + 1.2) { t ->
+            val a = when {
+                t < attack -> sin(PI / 2 * t / attack).let { it * it }
+                t < dur -> 1.0
+                else -> exp(-(t - dur) * 3.0)
+            }
+            var x = 0.0
+            for ((j, m) in notes.withIndex()) {
+                val f = Synth.hz(m)
+                ph[j * 2] += f * 1.002 / SR; ph[j * 2 + 1] += f * 0.998 / SR
+                x += sin(TAU * ph[j * 2]) + 0.4 * Synth.tri(ph[j * 2 + 1])
+            }
+            lp.run(x) * a * vol / notes.size
+        }
+    }
+
+    /** Glassy bell with a gentle onset. */
+    private fun softBell(o: FloatArray, start: Double, midi: Int, vol: Double) {
+        val f = Synth.hz(midi)
+        add(o, start, 2.0) { t ->
+            val a = min(1.0, t / 0.012)
+            (sin(TAU * f * t) * exp(-t * 2.2) + 0.3 * sin(TAU * f * 2.0 * t) * exp(-t * 4.0) + 0.12 * sin(TAU * f * 3.01 * t) * exp(-t * 7.0)) * a * vol
+        }
+    }
+
+    /** Round start: a calm rising swell with a soft two-note call on top. */
     private fun fanfare(): FloatArray {
-        val o = Synth.buf(2.6f)
-        val r = Random(107)
-        drum(o, 0.0, 0.7, 62.0, r)
-        drum(o, 0.28, 0.5, 70.0, r)
-        drum(o, 0.42, 0.55, 66.0, r)
-        drum(o, 0.7, 1.0, 55.0, r, 4.0)
-        horn(o, 0.7, 1.2, intArrayOf(38, 45, 50), 0.9)
-        return Synth.normalize(room(o, 0.45, 0.86), 0.85f)
+        val o = Synth.buf(2.8f)
+        softPad(o, 0.0, 1.4, intArrayOf(50, 57, 64, 66), 0.9, 0.5)
+        softBell(o, 0.35, 69, 0.22)
+        softBell(o, 0.7, 74, 0.25)
+        // A low, rounded swell instead of a drum hit.
+        add(o, 0.0, 1.8) { t -> sin(TAU * 55.0 * t) * sin(PI * min(1.0, t / 0.4) / 2) * exp(-t * 2.0) * 0.35 }
+        return Synth.normalize(room(o, 0.5, 0.86), 0.55f)
+    }
+
+    /** Victory: a warm major chord and a rising arpeggio of bells. */
+    private fun victory(): FloatArray {
+        val o = Synth.buf(3.4f)
+        softPad(o, 0.0, 1.8, intArrayOf(43, 50, 55, 59, 62), 0.9, 0.35)
+        val arp = intArrayOf(67, 71, 74, 79)
+        for ((k, n) in arp.withIndex()) softBell(o, 0.15 + k * 0.16, n, 0.2 + k * 0.02)
+        softBell(o, 0.9, 83, 0.16)
+        return Synth.normalize(room(o, 0.55, 0.88), 0.55f)
     }
 
     /** Promotion: strings rise through three chords and resolve with brass and cymbal. */
