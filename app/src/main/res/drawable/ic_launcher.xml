@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A little green tank standing on a planet, with a shell flying over it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#0B1030" android:pathData="M54,2a52,52 0,1 0,0.1 0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M20,24m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M84,18m-1.2,0a1.2,1.2 0,1 1,2.4 0a1.2,1.2 0,1 1,-2.4 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M90,48m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+    <path android:fillColor="#C89458" android:pathData="M54,62m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+    <path android:fillColor="#E6C38A" android:pathData="M34,52a14,8 0,1 0,28 0a14,8 0,1 0,-28 0z" />
+    <path android:fillColor="#8A5A2B" android:pathData="M66,78a8,5 0,1 0,16 0a8,5 0,1 0,-16 0z" />
+    <path android:fillColor="#263238" android:pathData="M38,26h30a4,4 0,0 1,4 4v2a4,4 0,0 1,-4 4h-30a4,4 0,0 1,-4 -4v-2a4,4 0,0 1,4 -4z" />
+    <path android:fillColor="#5CCB4A" android:pathData="M36,26 L42,16 L64,16 L70,26z" />
+    <path android:fillColor="#B3E5FC" android:pathData="M45,16a8,8 0,0 1,16 0z" />
+    <path android:fillColor="#FFCC80" android:pathData="M53,13m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path android:strokeColor="#37474F" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M58,13 L74,5" />
+    <path android:strokeColor="#263238" android:strokeWidth="1" android:pathData="M40,16 L40,6" />
+    <path android:fillColor="#76FF03" android:pathData="M40,6m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#FFD54F" android:pathData="M84,8m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+</vector>
