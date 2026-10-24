@@ -39,7 +39,11 @@ class Camera {
 }
 
 class WorldRenderer(val world: World) {
-    private class PlanetGfx(val path: Path, var version: Int, val body: Paint, val shade: Paint, val atmo: Paint, val atmoR: Float)
+    private class PlanetGfx(
+        val path: Path, var version: Int, val body: Paint, val shade: Paint, val atmo: Paint, val atmoR: Float,
+        val clouds: Paint?, val cloudShader: BitmapShader?, val cloudSize: Int, val rim: Paint,
+    )
+    private val cloudMatrix = Matrix()
 
     private val planetGfx = HashMap<Int, PlanetGfx>()
     val nebula: Bitmap = Tex.nebula(world.nebulaSeed)
@@ -81,7 +85,18 @@ class WorldRenderer(val world: World) {
                     intArrayOf(Gfx.withAlpha(tint, 0), Gfx.withAlpha(tint, 0), Gfx.withAlpha(tint, 70), Gfx.withAlpha(tint, 0)),
                     floatArrayOf(0f, inner - 0.06f, inner + 0.01f, 1f), Shader.TileMode.CLAMP)
             }
-            g = PlanetGfx(Path(), -1, body, shade, atmo, atmoR)
+            val hasClouds = pl.style == 1 || pl.style == 4 || pl.style == 5 || (pl.texSeed and 3) == 0 && pl.style != 7
+            val cloudTex = if (hasClouds) Tex.clouds(pl.texSeed) else null
+            val cloudShader = cloudTex?.let { BitmapShader(it, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT) }
+            val clouds = cloudShader?.let { sh2 -> Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { shader = sh2; alpha = 170 } }
+            // Sunlit rim on the upper-left edge, fading toward the night side.
+            val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 2.6f
+                shader = LinearGradient(pl.x - pl.baseR, pl.y - pl.baseR, pl.x + pl.baseR * 0.3f, pl.y + pl.baseR * 0.3f,
+                    Gfx.withAlpha(tint, 200), Gfx.withAlpha(tint, 0), Shader.TileMode.CLAMP)
+            }
+            g = PlanetGfx(Path(), -1, body, shade, atmo, atmoR, clouds, cloudShader, cloudTex?.width ?: 1, rim)
             planetGfx[pl.id] = g
         }
         if (g.version != pl.version) {
@@ -98,7 +113,22 @@ class WorldRenderer(val world: World) {
         return g
     }
 
+    /** Additive paint for anything that emits light. */
+    private val light = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.ADD)
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private fun addGlow(c: Canvas, x: Float, y: Float, r: Float, color: Int) {
+        if (r <= 0.1f) return
+        light.style = Paint.Style.FILL
+        light.shader = RadialGradient(x, y, r, color, Gfx.withAlpha(color, 0), Shader.TileMode.CLAMP)
+        c.drawCircle(x, y, r, light)
+        light.shader = null
+    }
+
     fun draw(c: Canvas, cam: Camera, t: Float, closeUp: Boolean, overlay: ((Canvas) -> Unit)? = null) {
+        time = t
         c.save()
         c.clipRect(if (cam.clip.isEmpty) cam.view else cam.clip)
         cam.apply(c)
@@ -129,6 +159,8 @@ class WorldRenderer(val world: World) {
     }
 
     // ------------------------------------------------------------------ planets
+
+    private var time = 0f
 
     private fun drawPlanet(c: Canvas, pl: Planet, px: Float) {
         val g = gfx(pl)
@@ -161,13 +193,25 @@ class WorldRenderer(val world: World) {
             while (i < cr.size) { path.lineTo(cr[i], cr[i + 1]); i += 2 }
             c.drawPath(path, s)
         }
+        // Slowly drifting clouds.
+        if (g.clouds != null && g.cloudShader != null) {
+            val k = pl.baseR * 2.4f / g.cloudSize
+            cloudMatrix.setScale(k, k)
+            cloudMatrix.postTranslate(pl.x - pl.baseR * 1.2f + (time * 6f + pl.texSeed % 500) % (g.cloudSize * k), pl.y - pl.baseR * 1.2f)
+            g.cloudShader.setLocalMatrix(cloudMatrix)
+            c.drawCircle(pl.x, pl.y, pl.maxR + 2f, g.clouds)
+        }
         c.restore()
         c.drawPath(g.path, g.shade)
+        c.drawPath(g.path, g.rim)
         // Freshly blasted ground glows and cools down.
         if (buildCarved(pl, 0.04f)) {
-            s.color = 0x33FF6D00
-            s.strokeWidth = 10f
-            c.drawPath(seg, s)
+            light.shader = null
+            light.color = 0x55FF6D00
+            light.strokeWidth = 10f
+            light.style = Paint.Style.STROKE
+            c.drawPath(seg, light)
+            light.style = Paint.Style.FILL
             var i = 0
             while (i < Planet.N) {
                 val h = pl.heat[i]
@@ -334,6 +378,13 @@ class WorldRenderer(val world: World) {
         c.translate(lx, ly)
         c.rotate((if (tk.air) tk.rot else tk.normal) / DEG + 90f)
         c.scale(Tank.SIZE, Tank.SIZE)
+        if (!tk.air && tk.drawLift < 2f) {
+            // Contact shadow under the tracks.
+            p.shader = RadialGradient(0f, 8f * tk.look.scale, 18f * tk.look.scale, 0x88000000.toInt(), 0x00000000, Shader.TileMode.CLAMP)
+            r.set(-18f * tk.look.scale, 5f * tk.look.scale, 18f * tk.look.scale, 11f * tk.look.scale)
+            c.drawOval(r, p)
+            p.shader = null
+        }
         TankArt.draw(c, tk.look, tk.color, TankArt.State(
             aim = tk.aim, gunOk = tk.gun, antennaOk = tk.antenna, tracksOk = tk.tracks,
             shield = tk.shield, flash = tk.hitFlash, time = t + tk.idx * 1.7f,
@@ -455,7 +506,7 @@ class WorldRenderer(val world: World) {
             }
             Look.SPARK -> {
                 val col = if (pr.color != 0) pr.color else 0xFFFFFFFF.toInt()
-                Gfx.glow(c, 0f, 0f, 5f, Gfx.withAlpha(col, 170))
+                addGlow(c, 0f, 0f, 6f, Gfx.withAlpha(col, 200))
                 p.color = 0xFFFFFFFF.toInt()
                 c.drawCircle(0f, 0f, 1.2f, p)
             }
@@ -540,7 +591,7 @@ class WorldRenderer(val world: World) {
                 if (on) Gfx.glow(c, 0f, 0f, 6f, 0x88FFAB40.toInt())
             }
             Look.METEOR -> {
-                Gfx.glow(c, 0f, 0f, 11f, 0x99FF6D00.toInt())
+                addGlow(c, 0f, 0f, 13f, 0xBBFF6D00.toInt())
                 path.reset()
                 for (i in 0 until 8) {
                     val a = i * TWO_PI / 8
@@ -651,9 +702,12 @@ class WorldRenderer(val world: World) {
             val f = (q.life / q.max).coerceIn(0f, 1f)
             when (q.type) {
                 World.P_SPARK -> {
-                    s.color = Gfx.withAlpha(q.color, (255 * min(1f, f * 1.6f)).toInt())
-                    s.strokeWidth = max(q.size, 1.1f * px)
-                    c.drawLine(q.x, q.y, q.x - q.vx * 0.035f, q.y - q.vy * 0.035f, s)
+                    light.shader = null
+                    light.style = Paint.Style.STROKE
+                    light.color = Gfx.withAlpha(q.color, (255 * min(1f, f * 1.6f)).toInt())
+                    light.strokeWidth = max(q.size, 1.1f * px)
+                    c.drawLine(q.x, q.y, q.x - q.vx * 0.035f, q.y - q.vy * 0.035f, light)
+                    light.style = Paint.Style.FILL
                 }
                 World.P_SMOKE -> {
                     p.color = Gfx.withAlpha(q.color, ((q.color ushr 24) * min(1f, f * 1.3f) * min(1f, (1f - f) * 6f + 0.2f)).toInt())
@@ -671,16 +725,19 @@ class WorldRenderer(val world: World) {
                     path.close()
                     c.drawPath(path, p)
                 }
-                World.P_FLASH -> Gfx.glow(c, q.x, q.y, q.size * (0.6f + 0.6f * (1 - f)), Gfx.withAlpha(q.color, (255 * f).toInt()))
+                World.P_FLASH -> addGlow(c, q.x, q.y, q.size * (0.6f + 0.6f * (1 - f)), Gfx.withAlpha(q.color, (255 * f).toInt()))
                 World.P_FLAME -> {
-                    Gfx.glow(c, q.x, q.y, q.size * 1.8f, Gfx.withAlpha(q.color, (150 * f).toInt()))
-                    p.color = Gfx.withAlpha(0xFFFFF59D.toInt(), (220 * f).toInt())
-                    c.drawCircle(q.x, q.y, q.size * 0.45f, p)
+                    addGlow(c, q.x, q.y, q.size * 1.9f, Gfx.withAlpha(q.color, (170 * f).toInt()))
+                    light.color = Gfx.withAlpha(0xFFFFF59D.toInt(), (200 * f).toInt())
+                    c.drawCircle(q.x, q.y, q.size * 0.45f, light)
                 }
                 World.P_RING -> {
-                    s.color = Gfx.withAlpha(q.color, (200 * f).toInt())
-                    s.strokeWidth = max(1.2f * px, 2.2f * f)
-                    c.drawCircle(q.x, q.y, q.size, s)
+                    light.shader = null
+                    light.style = Paint.Style.STROKE
+                    light.color = Gfx.withAlpha(q.color, (170 * f).toInt())
+                    light.strokeWidth = max(1.2f * px, 2.6f * f)
+                    c.drawCircle(q.x, q.y, q.size, light)
+                    light.style = Paint.Style.FILL
                 }
                 World.P_FIREBALL -> {
                     val (outer, inner) = when {
@@ -690,20 +747,23 @@ class WorldRenderer(val world: World) {
                         else -> 0xFF3E3633.toInt() to 0xFF6D3B22.toInt()
                     }
                     val a = (255 * min(1f, f * 2.2f)).toInt()
-                    p.shader = RadialGradient(q.x, q.y, q.size, intArrayOf(Gfx.withAlpha(inner, a), Gfx.withAlpha(outer, a * 3 / 4), Gfx.withAlpha(outer, 0)),
+                    // Hot stages emit light; the cooling smoke stage just covers what is behind.
+                    val paint = if (f > 0.3f) light else p
+                    paint.style = Paint.Style.FILL
+                    paint.shader = RadialGradient(q.x, q.y, q.size, intArrayOf(Gfx.withAlpha(inner, a), Gfx.withAlpha(outer, a * 3 / 4), Gfx.withAlpha(outer, 0)),
                         floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-                    c.drawCircle(q.x, q.y, q.size, p)
-                    p.shader = null
+                    c.drawCircle(q.x, q.y, q.size, paint)
+                    paint.shader = null
                 }
                 World.P_DUST -> {
                     p.color = Gfx.withAlpha(q.color, (110 * f).toInt())
                     c.drawCircle(q.x, q.y, q.size, p)
                 }
                 World.P_EMBER -> {
-                    p.color = Gfx.withAlpha(0xFFFFB74D.toInt(), (120 * f).toInt())
-                    c.drawCircle(q.x, q.y, q.size * 2.2f, p)
-                    p.color = Gfx.withAlpha(0xFFFFF8E1.toInt(), (255 * f).toInt())
-                    c.drawCircle(q.x, q.y, q.size * 0.8f, p)
+                    light.color = Gfx.withAlpha(0xFFFF9800.toInt(), (110 * f).toInt())
+                    c.drawCircle(q.x, q.y, q.size * 2.2f, light)
+                    light.color = Gfx.withAlpha(0xFFFFF8E1.toInt(), (255 * f).toInt())
+                    c.drawCircle(q.x, q.y, q.size * 0.8f, light)
                 }
             }
         }

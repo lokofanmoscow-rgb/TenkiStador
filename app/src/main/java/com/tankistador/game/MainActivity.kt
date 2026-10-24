@@ -15,11 +15,13 @@ import android.widget.EditText
 class MainActivity : Activity(), Host {
     private lateinit var view: GameView
     private lateinit var sound: Sound
+    private lateinit var music: Music
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         sound = Sound(this)
+        music = Music(this)
         val prefs = getSharedPreferences("tankistador", Context.MODE_PRIVATE)
         val kv = object : KeyValue {
             override fun get(key: String): String? = prefs.getString(key, null)
@@ -27,7 +29,7 @@ class MainActivity : Activity(), Host {
                 prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
             }
         }
-        val game = Game(this, kv, AndroidSound(sound))
+        val game = Game(this, kv, AndroidSound(sound), music)
         view = GameView(this, game)
         setContentView(view)
         game.start()
@@ -43,15 +45,18 @@ class MainActivity : Activity(), Host {
         super.onResume()
         hideBars()
         view.resume()
+        music.resume()
     }
 
     override fun onPause() {
         view.pause()
+        music.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
         sound.release()
+        music.release()
         super.onDestroy()
     }
 

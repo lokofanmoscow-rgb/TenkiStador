@@ -35,7 +35,8 @@ class ShopScene(game: Game, val match: Match, val idx: Int) : Scene(game) {
         sceneTop = 66f; sceneBottom = 330f
         bSave = buttons.add(Button("Сохранить", Button.Style.BLUE) {
             game.store.saveMatch(match)
-            showToast("Игра сохранена")
+            val shop = this
+            game.go(SaveSlotsScene(game, match) { game.go(shop) })
         }.set(right - 170, 338f, right - 6, 374f))
         bSave.textSize = 18f
         for ((i, part) in parts.withIndex()) {
@@ -69,7 +70,12 @@ class ShopScene(game: Game, val match: Match, val idx: Int) : Scene(game) {
         buttons.add(Button("В меню", Button.Style.FLAT) { leave() }.set(cx - 90, 652f, cx + 90, 702f)).textSize = 18f
     }
 
-    override fun enter() = game.sound.play("cash", 0.5f)
+    private var greeted = false
+
+    override fun enter() {
+        if (!greeted) game.sound.play("cash", 0.5f)
+        greeted = true
+    }
 
     private fun showToast(s: String) {
         toast = s

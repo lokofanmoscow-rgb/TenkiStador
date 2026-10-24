@@ -25,24 +25,24 @@ class MenuScene(game: Game) : Scene(game) {
         // Start the cycle at the most recently played profile.
         val last = profiles.maxByOrNull { it.lastPlayed }
         shown = if (last != null) profiles.indexOf(last) else 0
-        bLoad.enabled = game.store.hasSave()
+        bLoad.enabled = game.store.hasAnySave()
     }
 
     override fun layout() {
         buttons.clear()
         val cx = vw / 2
-        val top = 40f
-        bNew = buttons.add(Button("Новая игра", Button.Style.TEXT) { game.go(NewGameScene(game)) }.set(cx - 200, top + 70, cx + 200, top + 112))
+        val top = PANEL_TOP
+        bNew = buttons.add(Button("Новая игра", Button.Style.TEXT) { game.go(NewGameScene(game)) }.set(cx - 200, top + 18, cx + 200, top + 60))
         bLoad = buttons.add(Button("Загрузить игру", Button.Style.TEXT) {
-            if (!Flow.resume(game)) bLoad.enabled = false
-        }.set(cx - 200, top + 116, cx + 200, top + 158))
-        bSettings = buttons.add(Button("Настройки", Button.Style.TEXT) { game.go(SettingsScene(game)) }.set(cx - 200, top + 162, cx + 200, top + 204))
-        bExit = buttons.add(Button("Выход", Button.Style.TEXT) { game.host.quit() }.set(cx - 200, top + 214, cx + 200, top + 256))
+            game.go(SaveSlotsScene(game, null) { game.go(MenuScene(game)) })
+        }.set(cx - 200, top + 66, cx + 200, top + 108))
+        bSettings = buttons.add(Button("Настройки", Button.Style.TEXT) { game.go(SettingsScene(game)) }.set(cx - 200, top + 114, cx + 200, top + 156))
+        bExit = buttons.add(Button("Выход", Button.Style.TEXT) { game.host.quit() }.set(cx - 200, top + 166, cx + 200, top + 206))
         for (b in listOf(bNew, bLoad, bSettings)) { b.textSize = 30f; b.textColor = 0xFFFFFFFF.toInt() }
         bExit.textSize = 26f; bExit.textColor = 0xFFFF5252.toInt()
-        bLoad.enabled = game.store.hasSave()
-        recX = cx - 470; recY = 230f; recR = 82f
-        autX = cx + 470; autY = 150f; autR = 74f
+        bLoad.enabled = game.store.hasAnySave()
+        recX = cx - 470; recY = 300f; recR = 82f
+        autX = cx + 470; autY = 230f; autR = 74f
     }
 
     override fun update(dt: Float) {
@@ -60,10 +60,6 @@ class MenuScene(game: Game) : Scene(game) {
             game.sound.play("click", 0.5f)
             game.go(RecordsScene(game)); return
         }
-        if (hypot(x - autX, y - autY) < autR + 10) {
-            game.sound.play("click", 0.5f)
-            game.go(AuthorsScene(game)); return
-        }
         super.down(id, x, y)
     }
 
@@ -76,17 +72,16 @@ class MenuScene(game: Game) : Scene(game) {
         Tex.drawBall(c, texRecords, recX, recY, recR, t * 4f)
         Gfx.text(c, "РЕКОРДЫ", recX, recY + 10, 30f, 0xFF76FF03.toInt())
         Tex.drawBall(c, texAuthors, autX, autY, autR, -t * 3f)
-        Gfx.text(c, "АВТОРЫ", autX, autY + 10, 28f, 0xFF76FF03.toInt())
         Tex.drawBall(c, texSmall, cx + 560, vh - 120, 26f, t * 10f)
         drawSatellite(c, cx - 520 + cos(t * 0.35f) * 60f, vh - 150 + sin(t * 0.5f) * 30f, t)
         drawMenuTank(c, autX - 20, autY - autR - 6, t)
 
-        val top = 40f
-        Gfx.screen(c, cx - 250, top, cx + 250, top + 262)
-        Gfx.text(c, "TANKISTADOR", cx, top + 52, 44f, Gfx.YELLOW)
+        drawLogo(c, cx, 76f, t)
+        val top = PANEL_TOP
+        Gfx.screen(c, cx - 230, top, cx + 230, top + 214)
         buttons.draw(c)
 
-        drawStats(c, cx, top + 320)
+        drawStats(c, cx, top + 262)
     }
 
     private fun drawStats(c: Canvas, cx: Float, y0: Float) {
@@ -114,6 +109,10 @@ class MenuScene(game: Game) : Scene(game) {
             Gfx.text(c, l.first, cx, y, if (i == 0) 24f else 19f, l.second, alpha = a)
             y += if (i == 0) 30f else 25f
         }
+    }
+
+    companion object {
+        const val PANEL_TOP = 128f
     }
 
     private fun drawSatellite(c: Canvas, x: Float, y: Float, t: Float) {
@@ -148,4 +147,54 @@ class MenuScene(game: Game) : Scene(game) {
         TankArt.draw(c, Tanks.all[3].look, Player.COLOR_LEFT, TankArt.State(aim = 40f + sin(t) * 20f, time = t, active = true))
         c.restore()
     }
+
+}
+
+/** The "TankPlanet" title: metal letters over a ringed planet. */
+fun drawLogo(c: Canvas, cx: Float, base: Float, t: Float) {
+    val size = 66f
+    val text = "TankPlanet"
+    val w = Gfx.measure(text, size)
+    // Ringed planet behind the title.
+    val px = cx + w / 2 + 22f
+    val py = base - size * 0.36f
+    Gfx.glow(c, px, py, 70f, 0x443D5AFE)
+    val f = Gfx.fill
+    f.shader = android.graphics.RadialGradient(px - 10, py - 12, 40f, 0xFFFFCC80.toInt(), 0xFF8D3C14.toInt(), android.graphics.Shader.TileMode.CLAMP)
+    c.drawCircle(px, py, 30f, f)
+    f.shader = null
+    val ring = android.graphics.RectF(px - 58, py - 12, px + 58, py + 12)
+    Gfx.stroke.color = 0xCCFFE0B2.toInt(); Gfx.stroke.strokeWidth = 4f
+    c.save()
+    c.rotate(-14f, px, py)
+    c.drawArc(ring, 0f, 180f, false, Gfx.stroke)
+    c.restore()
+    // Letters: dark outline, then a steel gradient.
+    val p = Gfx.text
+    p.typeface = Gfx.bold
+    p.textSize = size
+    p.textAlign = android.graphics.Paint.Align.CENTER
+    p.style = android.graphics.Paint.Style.STROKE
+    p.strokeWidth = 9f
+    p.color = 0xFF0B1220.toInt()
+    c.drawText(text, cx, base, p)
+    p.style = android.graphics.Paint.Style.FILL
+    p.shader = android.graphics.LinearGradient(0f, base - size * 0.8f, 0f, base + 4f,
+        intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFD54F.toInt(), 0xFFFF8F00.toInt(), 0xFF8D4A00.toInt()),
+        floatArrayOf(0f, 0.35f, 0.7f, 1f), android.graphics.Shader.TileMode.CLAMP)
+    c.drawText(text, cx, base, p)
+    p.shader = null
+    p.strokeWidth = 0f
+    // A glint sweeping across the title.
+    val gx = cx - w / 2 + ((t * 0.35f) % 1.6f) * w
+    c.save()
+    c.clipRect(cx - w / 2, base - size, cx + w / 2, base + 8)
+    Gfx.glow(c, gx, base - size * 0.35f, 40f, 0x55FFFFFF)
+    c.restore()
+    // Front half of the ring passes over the planet.
+    c.save()
+    c.rotate(-14f, px, py)
+    Gfx.stroke.color = 0xEEFFE0B2.toInt()
+    c.drawArc(ring, 180f, 180f, false, Gfx.stroke)
+    c.restore()
 }

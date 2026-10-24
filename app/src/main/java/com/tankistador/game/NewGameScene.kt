@@ -78,7 +78,7 @@ class NewGameScene(game: Game) : Scene(game) {
         Gfx.text(c, "Стартовые деньги", lx, top + 348, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
         Gfx.text(c, "Время на ход", lx, top + 404, 22f, 0xFFFFFFFF.toInt(), Gfx.Align.LEFT)
         val vx = cx + 80
-        Gfx.text(c, "…${levels[s.aiLevel.coerceIn(0, 2)]}…", vx, top + 236, 24f, if (s.rightIsAI) Gfx.YELLOW else Gfx.GREY)
+        Gfx.text(c, levels[s.aiLevel.coerceIn(0, 2)], vx, top + 236, 24f, if (s.rightIsAI) Gfx.YELLOW else Gfx.GREY)
         Gfx.text(c, "${s.rounds}", vx, top + 292, 26f, Gfx.YELLOW)
         Gfx.text(c, "${s.startMoney}", vx, top + 348, 26f, Gfx.YELLOW)
         Gfx.text(c, turnLabel(s.turnTime), vx, top + 404, 22f, Gfx.YELLOW)

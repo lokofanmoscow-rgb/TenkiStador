@@ -135,6 +135,7 @@ class Planet(val id: Int, val x: Float, val y: Float, val baseR: Float, val dens
         }
         if (!changed) return false
         version++
+        unstable = max(unstable, 2.5f)
         maxR = r.max()
         var area = 0f
         for (v in r) area += v * v
@@ -178,6 +179,45 @@ class Planet(val id: Int, val x: Float, val y: Float, val baseR: Float, val dens
             cracks.add(pts)
         }
         while (cracks.size > 40) cracks.removeAt(0)
+    }
+
+    /** Seconds of ground instability left after a blast; crater walls crumble meanwhile. */
+    var unstable = 0f
+
+    /**
+     * Lets over-steep ground crumble: material slides from a high sample to its lower
+     * neighbour until the slope is stable. Returns the sample that moved most, or -1.
+     */
+    fun relax(): Int {
+        var worst = -1
+        var worstMove = 0.3f
+        val spacing = TWO_PI / N
+        for (i in 0 until N) {
+            val j = (i + 1) % N
+            val a = r[i]; val b = r[j]
+            val maxStep = (a + b) * 0.5f * spacing * 1.25f
+            val diff = a - b
+            if (abs(diff) > maxStep) {
+                val move = (abs(diff) - maxStep) * 0.35f
+                if (diff > 0) { r[i] -= move; r[j] += move * 0.92f } else { r[j] -= move; r[i] += move * 0.92f }
+                if (move > worstMove) { worstMove = move; worst = if (diff > 0) i else j }
+            }
+        }
+        if (worst >= 0) version++
+        return worst
+    }
+
+    /** A settling rock adds a little ground where it lands. */
+    fun deposit(angle: Float, amount: Float) {
+        var a = angle / TWO_PI * N
+        a %= N.toFloat()
+        if (a < 0) a += N
+        val i = a.toInt() % N
+        for (k in -1..1) {
+            val j = (i + k + N) % N
+            r[j] = min(baseR * 1.07f, r[j] + amount * (if (k == 0) 0.5f else 0.25f))
+        }
+        version++
     }
 
     fun cool(dt: Float): Boolean {
@@ -234,21 +274,64 @@ class Tank(val idx: Int, var planet: Planet, var ang: Float, val model: Int, val
         Part.GUN -> gun / gunMax; Part.HULL -> hull / hullMax; Part.ANTENNA -> antenna / antennaMax; Part.TRACKS -> tracks / tracksMax
     }.coerceIn(0f, 1f)
 
-    /** Snaps the tank onto the current surface. Returns the height it fell. */
+    /** Planet version the tank was last settled on; ground changes make it settle again. */
+    var placedVersion = -1
+
+    /** Seconds since the driver last pushed the tracks; a driven tank does not slide back. */
+    var driveT = 1f
+
+    /**
+     * Settles the tank on the ground. The tracks rest on the highest point under each half,
+     * so a tank rolls over holes narrower than itself instead of dropping into them.
+     * Returns the height it fell.
+     */
     fun place(): Float {
         val oldR = sqrt((x - planet.x) * (x - planet.x) + (y - planet.y) * (y - planet.y))
-        val n = planet.normalAt(ang, 7f * DEG)
-        val rx = cos(ang); val ry = sin(ang)
-        val nx = cos(n) * 0.5f + rx * 0.5f
-        val ny = sin(n) * 0.5f + ry * 0.5f
+        val sr0 = planet.surfaceAt(ang)
+        val span = 11.5f * sc / max(sr0, 10f)
+        var lA = ang; var lR = -1f; var rA = ang; var rR = -1f
+        for (k in 0..6) {
+            val f = k / 6f
+            val a1 = ang - span * f
+            val r1 = planet.surfaceAt(a1) + f * f * span * span * sr0 * 0.5f
+            if (r1 > lR) { lR = r1; lA = a1 }
+            val a2 = ang + span * f
+            val r2 = planet.surfaceAt(a2) + f * f * span * span * sr0 * 0.5f
+            if (r2 > rR) { rR = r2; rA = a2 }
+        }
+        lR = planet.surfaceAt(lA); rR = planet.surfaceAt(rA)
+        val lx = planet.x + cos(lA) * lR; val ly = planet.y + sin(lA) * lR
+        val rx2 = planet.x + cos(rA) * rR; val ry2 = planet.y + sin(rA) * rR
+        val ux = cos(ang); val uy = sin(ang)
+        var supportR = sr0
+        var nx = ux; var ny = uy
+        val tx = rx2 - lx; val ty = ry2 - ly
+        val tl = sqrt(tx * tx + ty * ty)
+        if (tl > 1f) {
+            nx = ty / tl; ny = -tx / tl
+            // Where the radial line through the tank meets the line between both contacts.
+            val den = ux * ty - uy * tx
+            if (abs(den) > 1e-4f) {
+                val s = ((lx - planet.x) * ty - (ly - planet.y) * tx) / den
+                if (s > 0f) supportR = max(s, sr0)
+            }
+        } else {
+            val n = planet.normalAt(ang, 7f * DEG)
+            nx = cos(n); ny = sin(n)
+        }
+        nx = nx * 0.85f + ux * 0.15f
+        ny = ny * 0.85f + uy * 0.15f
         normal = atan2(ny, nx)
-        val sr = planet.surfaceAt(ang)
         val lift = 6.5f * sc
-        x = planet.x + rx * sr + cos(normal) * lift
-        y = planet.y + ry * sr + sin(normal) * lift
+        x = planet.x + ux * supportR + cos(normal) * lift
+        y = planet.y + uy * supportR + sin(normal) * lift
         rot = normal
-        return max(0f, oldR - (sr + lift))
+        placedVersion = planet.version
+        return max(0f, oldR - (supportR + lift))
     }
+
+    /** How far the hull is tilted away from "straight up" (radians, signed toward growing angle). */
+    fun tilt() = wrapAngle(normal - ang)
 
     /** World-space angle (radians) the barrel points at. */
     fun aimWorld() = normal + (90f - aim) * DEG
@@ -482,7 +565,7 @@ class World(val seed: Long) {
     var flash = 0f
     private val tmp = FloatArray(2)
     private val tmp8 = FloatArray(8)
-    private val slopeTmp = FloatArray(2)
+    private var relaxT = 0f
 
     fun rf() = rng.nextFloat()
     fun rr(a: Float, b: Float) = a + (b - a) * rng.nextFloat()
@@ -697,15 +780,15 @@ class World(val seed: Long) {
         events.add(Ev.Shot(t.idx, w))
         when (w.kind) {
             WeaponKind.REPAIR -> {
-                t.hull = min(t.hullMax, t.hull + 30f)
+                t.hull = min(t.hullMax, t.hull + 20f)
                 val worst = listOf(Part.GUN, Part.ANTENNA, Part.TRACKS).minByOrNull { t.ratio(it) }!!
                 when (worst) {
-                    Part.GUN -> t.gun = min(t.gunMax, t.gun + t.gunMax * 0.5f)
-                    Part.ANTENNA -> t.antenna = min(t.antennaMax, t.antenna + t.antennaMax * 0.5f)
-                    Part.TRACKS -> t.tracks = min(t.tracksMax, t.tracks + t.tracksMax * 0.5f)
+                    Part.GUN -> t.gun = min(t.gunMax, t.gun + 10f)
+                    Part.ANTENNA -> t.antenna = min(t.antennaMax, t.antenna + 10f)
+                    Part.TRACKS -> t.tracks = min(t.tracksMax, t.tracks + 10f)
                     else -> {}
                 }
-                texts.add(FloatText(t.x, t.y - 20, "+30 · ${worst.title.lowercase()}", 0xFF69F0AE.toInt()))
+                texts.add(FloatText(t.x, t.y - 20, "корпус +20 · ${worst.title.lowercase()} +10", 0xFF69F0AE.toInt()))
                 sparkle(t.x, t.y, 0xFF69F0AE.toInt())
                 events.add(Ev.Repaired(t.idx))
                 return
@@ -767,12 +850,14 @@ class World(val seed: Long) {
     /** Drives the tank along the surface. Returns false when it cannot move. */
     fun moveTank(t: Tank, dir: Int, dt: Float): Boolean {
         if (!t.alive || t.air || t.fuel <= 0f || t.tracks <= 0f) return false
-        val speed = 34f * (0.3f + 0.7f * t.tracks / t.tracksMax)
+        val base = 34f * (0.3f + 0.7f * t.tracks / t.tracksMax)
         val sr = t.planet.surfaceAt(t.ang)
+        // Uphill the tank crawls, downhill it rolls a little faster, but it always gets through.
+        val uphill = -t.tilt() * dir
+        val climb = (uphill / DEG).coerceIn(-40f, 85f)
+        val factor = if (climb > 0f) (1f - climb / 95f).coerceAtLeast(0.15f) else 1f + (-climb) / 160f
+        val speed = base * factor
         val nAng = t.ang + dir * speed * dt / sr
-        // Too steep to climb?
-        val rise = t.planet.surfaceAt(nAng + dir * 4f / sr) - sr
-        if (rise / 4f > 1.2f) return false
         for (o in tanks) {
             if (o === t || !o.alive || o.planet !== t.planet || o.air) continue
             val gap = abs(wrapAngle(o.ang - nAng)) * sr
@@ -780,9 +865,13 @@ class World(val seed: Long) {
             if (gap < 34f && gap < gapNow) return false
         }
         t.ang = wrapAngle(nAng)
-        // Worn tracks waste fuel.
-        t.fuel = max(0f, t.fuel - speed * dt * (0.5f + 0.5f * (1f - t.tracks / t.tracksMax)))
-        t.place()
+        t.driveT = 0f
+        t.slide = 0f
+        // Worn tracks and climbing waste fuel.
+        val effort = 1f + max(0f, climb) / 60f
+        t.fuel = max(0f, t.fuel - base * dt * effort * (0.5f + 0.5f * (1f - t.tracks / t.tracksMax)))
+        val fall = t.place()
+        if (fall > 1f) t.drawLift += fall
         if (rf() < 0.5f) {
             val p = spawn(t.x - cos(t.normal) * 6, t.y - sin(t.normal) * 6, P_DUST)
             p.vx = -dir * cos(t.normal + PI.toFloat() / 2) * 12f + rr(-5f, 5f)
@@ -869,6 +958,25 @@ class World(val seed: Long) {
                 pending.removeAt(pi)
                 explode(e[1], e[2], e[3], e[4], e[5].toInt(), null, e[6] > 0f)
             } else pi++
+        }
+        relaxT -= dt
+        if (relaxT <= 0f) {
+            relaxT = 0.05f
+            for (p in planets) {
+                if (p.unstable <= 0f) continue
+                p.unstable -= 0.05f
+                val i = p.relax()
+                if (i >= 0 && rf() < 0.6f) {
+                    // Crumbling ground throws a little dust and grit.
+                    val a = i * TWO_PI / Planet.N
+                    p.surfacePoint(a, 1f, tmp)
+                    dustBurst(tmp[0], tmp[1], p, 2)
+                    if (rf() < 0.5f) {
+                        val m = material(p.style)
+                        rocks(tmp[0], tmp[1], 1, m[0], m[1], 30f, p)
+                    }
+                }
+            }
         }
         for (t in tanks) stepTank(t, dt)
         for (c in colonists) stepColonist(c, dt)
@@ -1106,7 +1214,7 @@ class World(val seed: Long) {
             WeaponKind.NAPALM -> {
                 p.alive = false
                 val a = pl.angleOf(p.x, p.y)
-                fires.add(Fire(pl, a, 42f / pl.surfaceAt(a), 3, p.owner, 6f))
+                fires.add(Fire(pl, a, 42f / pl.surfaceAt(a), 3, p.owner, 10f))
                 events.add(Ev.FireStart(p.owner))
                 explode(p.x, p.y, p.radius, p.damage, p.owner, tank, true)
                 return
@@ -1327,7 +1435,7 @@ class World(val seed: Long) {
                 val dx = h.x - t.x; val dy = h.y - t.y
                 val d = sqrt(dx * dx + dy * dy)
                 if (d < 95f) {
-                    damage(t, 2.2f * (1f - d / 95f) + 0.6f, h.owner, false, h.x, h.y, quiet = true)
+                    damage(t, 3.7f * (1f - d / 95f) + 1f, h.owner, false, h.x, h.y, quiet = true)
                     if (!t.air) {
                         val tx = -sin(t.normal); val ty = cos(t.normal)
                         t.slide += (dx * tx + dy * ty) / d * 0.25f
@@ -1382,10 +1490,15 @@ class World(val seed: Long) {
             }
             return
         }
-        // Pushed along the ground, or sliding down a steep crater wall.
-        t.planet.slope(t.ang, slopeTmp)
-        val steep = slopeTmp[0] > 38f * DEG
-        if (steep) t.slide += slopeTmp[1] * (slopeTmp[0] - 38f * DEG) * 2.5f * dt
+        t.driveT += dt
+        if (t.placedVersion != t.planet.version) {
+            val fall = t.place()
+            if (fall > 1f) t.drawLift += fall
+        }
+        // Pushed along the ground, or sliding down a steep crater wall (unless being driven).
+        val tilt = t.tilt()
+        val steep = abs(tilt) > 40f * DEG && t.driveT > 0.3f
+        if (steep) t.slide += sign(tilt) * (abs(tilt) - 40f * DEG) * 2.5f * dt
         if (abs(t.slide) > 0.0005f) {
             val sr = t.planet.surfaceAt(t.ang)
             val nAng = t.ang + t.slide * dt
@@ -1589,7 +1702,7 @@ class World(val seed: Long) {
         if (t.hull <= 0f) {
             t.alive = false
             events.add(Ev.Killed(t.idx, by))
-            pending.add(floatArrayOf(time + 0.3f, t.x, t.y, 44f, 26f, by.toFloat(), 1f))
+            pending.add(floatArrayOf(time + 0.3f, t.x, t.y, 46f, 40f, by.toFloat(), 1f))
             rocks(t.x, t.y, 22, t.color, 0xFF37474F.toInt(), 180f, t.planet)
         }
     }
@@ -1773,6 +1886,7 @@ class World(val seed: Long) {
                     } else {
                         p.vx = 0f; p.vy = 0f; p.vrot = 0f
                         p.flag = 2
+                        if (p.size > 1.8f) pl.deposit(a, p.size * 0.3f)
                         p.type = P_DUST
                         p.grow = 0f
                         p.life = min(p.life, 1.2f); p.max = max(p.life, 0.1f)

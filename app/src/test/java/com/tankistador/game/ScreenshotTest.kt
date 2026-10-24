@@ -46,8 +46,8 @@ class ScreenshotTest {
         shot(game, "08_records")
         game.go(SettingsScene(game)); run(game, 0.5f)
         shot(game, "09_settings")
-        game.go(AuthorsScene(game)); run(game, 0.5f)
-        shot(game, "10_authors")
+        game.go(SaveSlotsScene(game, null) { game.go(MenuScene(game)) }); run(game, 0.5f)
+        shot(game, "10_load_slots")
     }
 
     @Test

@@ -180,6 +180,16 @@ object Gfx {
         fill.shader = null
     }
 
+    /** Light that adds to whatever is underneath: fire, sparks, flashes. */
+    val light = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.ADD) }
+
+    fun addGlow(c: Canvas, x: Float, y: Float, r: Float, color: Int) {
+        if (r <= 0.1f) return
+        light.shader = RadialGradient(x, y, r, color, withAlpha(color, 0), Shader.TileMode.CLAMP)
+        c.drawCircle(x, y, r, light)
+        light.shader = null
+    }
+
     val blur = BlurMaskFilter(6f, BlurMaskFilter.Blur.NORMAL)
 }
 
@@ -235,61 +245,93 @@ object Tex {
 
     private val cache = HashMap<Long, Bitmap>()
 
-    fun planet(style: Int, seed: Int, size: Int = 256): Bitmap {
+    /**
+     * Planet surface with baked relief: a height field is built first, then every pixel is lit
+     * from the upper left (the same direction as the scene's sun) using the local slope.
+     */
+    fun planet(style: Int, seed: Int, size: Int = 320): Bitmap {
         val key = style.toLong() * 1_000_003L + seed + size * 7L
         cache[key]?.let { return it }
         val px = IntArray(size * size)
+        val hgt = FloatArray(size * size)
+        val col0 = IntArray(size * size)
         val pal = palettes[style % palettes.size]
         val sc = 6f / size
-        val craters = if (style == 0 || style == 7 || style == 3) 14 else 4
+        val craters = if (style == 0 || style == 7 || style == 3) 16 else 5
         val cr = FloatArray(craters * 3)
         for (i in 0 until craters) {
             cr[i * 3] = hash(i, 1, seed) * size
             cr[i * 3 + 1] = hash(i, 2, seed) * size
-            cr[i * 3 + 2] = (0.03f + hash(i, 3, seed) * 0.09f) * size
+            cr[i * 3 + 2] = (0.025f + hash(i, 3, seed) * 0.09f) * size
         }
         for (y in 0 until size) for (x in 0 until size) {
             val fx = x * sc; val fy = y * sc
             var v: Float
+            var h: Float
             when (style) {
-                1 -> v = fbm(fx * 0.4f, fy * 2.2f, seed) * 0.8f + fbm(fx, fy, seed + 7) * 0.2f
+                1 -> { v = fbm(fx * 0.4f, fy * 2.2f, seed) * 0.8f + fbm(fx, fy, seed + 7) * 0.2f; h = v * 0.6f }
                 2 -> {
                     val w = fbm(fx * 0.5f, fy * 0.5f, seed + 3) * 4f
                     v = 0.5f + 0.5f * sin(fy * 1.6f + w)
-                    v = v * 0.6f + fbm(fx * 1.5f, fy * 1.5f, seed) * 0.4f
+                    val d = fbm(fx * 1.5f, fy * 1.5f, seed)
+                    v = v * 0.6f + d * 0.4f
+                    h = d
                 }
                 4 -> {
-                    val h = fbm(fx * 0.7f, fy * 0.7f, seed)
-                    v = if (h < 0.5f) h * 0.75f else 0.5f + (h - 0.5f) * 1.0f
+                    val hh = fbm(fx * 0.7f, fy * 0.7f, seed)
+                    v = if (hh < 0.5f) hh * 0.75f else 0.5f + (hh - 0.5f) * 1.0f
+                    h = max(hh, 0.5f)
                 }
                 5 -> {
                     val w = fbm(fx * 0.6f, fy * 0.6f, seed) * 1.6f
                     v = 0.5f + 0.5f * sin(fy * 3.1f + w * 2f)
+                    h = v * 0.25f
                 }
-                7 -> {
-                    v = fbm(fx, fy, seed) * 0.8f
-                }
-                else -> v = fbm(fx, fy, seed)
+                7 -> { v = fbm(fx, fy, seed) * 0.8f; h = v }
+                else -> { v = fbm(fx, fy, seed); h = v }
             }
-            var col = ramp(pal, v)
-            // Craters: darker floor, lighter rim.
             for (i in 0 until craters) {
                 val dx = x - cr[i * 3]; val dy = y - cr[i * 3 + 1]
                 val d = sqrt(dx * dx + dy * dy) / cr[i * 3 + 2]
-                if (d < 1.15f) {
-                    val k = if (d < 0.85f) -0.18f else 0.16f * (1 - abs(d - 1f) / 0.15f).coerceAtLeast(0f)
-                    col = shade(col, k)
+                if (d < 1.3f) {
+                    h += if (d < 0.9f) -0.25f * (1f - d * d / 0.81f) else 0.12f * (1f - abs(d - 1.05f) / 0.25f).coerceAtLeast(0f)
                 }
             }
+            hgt[y * size + x] = h
+            var c = ramp(pal, v)
             if (style == 7) {
                 val crack = abs(fbm(fx * 1.3f, fy * 1.3f, seed + 9) - 0.5f)
-                if (crack < 0.035f) col = ramp(intArrayOf(0xFFEB3B, 0xFF6F00, 0xD84315), crack / 0.035f)
+                if (crack < 0.035f) c = ramp(intArrayOf(0xFFEB3B, 0xFF6F00, 0xD84315), crack / 0.035f) or 0x01000000
             }
-            px[y * size + x] = col
+            col0[y * size + x] = c
+        }
+        val bump = when (style) { 5 -> 3f; 1 -> 6f; else -> 11f }
+        for (y in 0 until size) for (x in 0 until size) {
+            val i = y * size + x
+            val gx = hgt[y * size + min(x + 1, size - 1)] - hgt[y * size + max(x - 1, 0)]
+            val gy = hgt[min(y + 1, size - 1) * size + x] - hgt[max(y - 1, 0) * size + x]
+            // Light from the upper left: slopes facing it brighten, the rest darken.
+            val lit = (-(gx * -0.6f + gy * -0.8f)) * bump
+            var c = col0[i]
+            val glowing = style == 7 && (c ushr 24) == 0x01
+            c = c or (0xFF shl 24)
+            px[i] = if (glowing) c else shade(c, lit.coerceIn(-0.45f, 0.4f))
         }
         val b = Bitmap.createBitmap(px, size, size, Bitmap.Config.ARGB_8888)
         cache[key] = b
         return b
+    }
+
+    /** White wisps on transparent background, drawn slowly turning over some planets. */
+    fun clouds(seed: Int, size: Int = 256): Bitmap {
+        val px = IntArray(size * size)
+        val sc = 5f / size
+        for (y in 0 until size) for (x in 0 until size) {
+            val n = fbm(x * sc * 1.3f, y * sc * 3f, seed + 31)
+            val a = ((n - 0.52f) * 3.2f).coerceIn(0f, 0.85f)
+            px[y * size + x] = ((a * 255).toInt() shl 24) or 0xF4F8FF
+        }
+        return Bitmap.createBitmap(px, size, size, Bitmap.Config.ARGB_8888)
     }
 
     private fun shade(c: Int, k: Float): Int {
@@ -298,7 +340,7 @@ object Tex {
     }
 
     /** Soft coloured clouds on transparent background. */
-    fun nebula(seed: Int, w: Int = 240, h: Int = 140): Bitmap {
+    fun nebula(seed: Int, w: Int = 400, h: Int = 220): Bitmap {
         val px = IntArray(w * h)
         val colors = arrayOf(
             intArrayOf(0x2E7D32, 0xC62828), intArrayOf(0x6A1B9A, 0xD81B60), intArrayOf(0x1565C0, 0x00897B),

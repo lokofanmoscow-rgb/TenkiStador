@@ -39,50 +39,50 @@ class Weapon(
 
 object Weapons {
     val all = listOf(
-        Weapon(0, "Болванка", 0, WeaponKind.SHELL, 18f, 24f, Look.SHELL, "снаряд",
+        Weapon(0, "Болванка", 0, WeaponKind.SHELL, 30f, 26f, Look.SHELL, "снаряд",
             "Чугунная болванка. Бесплатная и бесконечная.", 0xFFCFD8DC.toInt()),
-        Weapon(1, "Фугас", 25, WeaponKind.SHELL, 34f, 38f, Look.HE, "снаряд",
+        Weapon(1, "Фугас", 25, WeaponKind.SHELL, 55f, 40f, Look.HE, "снаряд",
             "Толстый фугасный снаряд. Глубокая воронка и много осколков.", 0xFFFFB74D.toInt()),
-        Weapon(2, "Бронебой", 45, WeaponKind.PIERCE, 30f, 16f, Look.AP, "снаряд",
+        Weapon(2, "Бронебой", 45, WeaponKind.PIERCE, 50f, 17f, Look.AP, "снаряд",
             "Остроносый сердечник. При прямом попадании урон почти вдвое больше.", 0xFF90A4AE.toInt()),
-        Weapon(3, "Тройчатка", 40, WeaponKind.TRIPLE, 17f, 22f, Look.SHELL, "3 снаряда",
+        Weapon(3, "Тройчатка", 40, WeaponKind.TRIPLE, 28f, 22f, Look.SHELL, "3 снаряда",
             "Три снаряда разом, веером. Хоть один да долетит.", 0xFFFFF176.toInt()),
-        Weapon(4, "Очередь", 55, WeaponKind.BURST, 13f, 18f, Look.SHELL, "5 снарядов",
+        Weapon(4, "Очередь", 55, WeaponKind.BURST, 22f, 18f, Look.SHELL, "5 снарядов",
             "Пять выстрелов подряд с небольшим разбросом.", 0xFFFFE082.toInt()),
-        Weapon(5, "Ливень", 90, WeaponKind.ROCKETS, 15f, 22f, Look.ROCKET, "6 ракет",
+        Weapon(5, "Ливень", 90, WeaponKind.ROCKETS, 25f, 22f, Look.ROCKET, "6 ракет",
             "Залп из шести ракет. Двигатели разгоняют их первые полсекунды.", 0xFFFF8A65.toInt(), thrust = 180f, burn = 0.45f),
-        Weapon(6, "Попрыгунчик", 30, WeaponKind.BOUNCER, 26f, 30f, Look.BALL, "снаряд",
+        Weapon(6, "Попрыгунчик", 30, WeaponKind.BOUNCER, 42f, 30f, Look.BALL, "снаряд",
             "Резиновый мяч со взрывчаткой. Скачет по грунту до четырёх раз и взрывается у танка.", 0xFF81D4FA.toInt()),
-        Weapon(7, "Лягушка", 55, WeaponKind.HOPPER, 16f, 22f, Look.FROG, "3 взрыва",
+        Weapon(7, "Лягушка", 55, WeaponKind.HOPPER, 27f, 22f, Look.FROG, "3 взрыва",
             "Взрывается при каждом приземлении и прыгает дальше. Три взрыва подряд.", 0xFF9CCC65.toInt()),
-        Weapon(8, "Кассета", 60, WeaponKind.CLUSTER, 12f, 18f, Look.CANISTER, "8 бомбочек",
+        Weapon(8, "Кассета", 60, WeaponKind.CLUSTER, 20f, 18f, Look.CANISTER, "8 бомбочек",
             "В верхней точке раскрывается и высыпает восемь бомбочек.", 0xFFB0BEC5.toInt()),
-        Weapon(9, "Фейерверк", 65, WeaponKind.FIREWORK, 9f, 13f, Look.FIREWORK, "10 искр",
+        Weapon(9, "Фейерверк", 65, WeaponKind.FIREWORK, 15f, 13f, Look.FIREWORK, "10 искр",
             "Рвётся в воздухе рядом с целью и разлетается десятью взрывающимися искрами.", 0xFFFF4081.toInt()),
-        Weapon(10, "Арбуз", 50, WeaponKind.MELON, 11f, 15f, Look.MELON, "6 взрывов",
+        Weapon(10, "Арбуз", 50, WeaponKind.MELON, 19f, 15f, Look.MELON, "6 взрывов",
             "Раскалывается о грунт, и пять косточек разлетаются, взрываясь вокруг.", 0xFF66BB6A.toInt()),
-        Weapon(11, "Землекопы", 60, WeaponKind.MOLES, 28f, 26f, Look.POD, "2 робота",
+        Weapon(11, "Землекопы", 60, WeaponKind.MOLES, 45f, 26f, Look.POD, "2 робота",
             "Два заводных робота. Ползут по грунту в разные стороны и взрываются у танка.", 0xFFBCAAA4.toInt()),
-        Weapon(12, "Мины", 45, WeaponKind.MINES, 26f, 28f, Look.MINE_POD, "3 мины",
+        Weapon(12, "Мины", 45, WeaponKind.MINES, 42f, 28f, Look.MINE_POD, "3 мины",
             "Разбрасывает три мины. Они ждут, пока рядом не проедет танк или не грохнет взрыв.", 0xFFEF5350.toInt()),
-        Weapon(13, "Огнесмесь", 50, WeaponKind.NAPALM, 10f, 16f, Look.NAPALM, "пожар",
+        Weapon(13, "Огнесмесь", 50, WeaponKind.NAPALM, 16f, 16f, Look.NAPALM, "пожар",
             "Разливает по грунту пламя, которое жжёт танки три хода подряд.", 0xFFFF7043.toInt()),
-        Weapon(14, "Бурав", 40, WeaponKind.DRILL, 30f, 46f, Look.DRILL, "бур",
+        Weapon(14, "Бурав", 40, WeaponKind.DRILL, 50f, 46f, Look.DRILL, "бур",
             "Вгрызается в грунт и взрывается в глубине. Отличная лопата.", 0xFF8D6E63.toInt()),
-        Weapon(15, "Сейсмобомба", 80, WeaponKind.QUAKE, 14f, 20f, Look.QUAKE, "9 взрывов",
+        Weapon(15, "Сейсмобомба", 80, WeaponKind.QUAKE, 22f, 20f, Look.QUAKE, "9 взрывов",
             "Ударная волна бежит по поверхности планеты цепочкой из девяти взрывов.", 0xFFA1887F.toInt()),
-        Weapon(16, "Умник", 90, WeaponKind.HOMING, 30f, 30f, Look.HOMING, "ракета",
+        Weapon(16, "Умник", 90, WeaponKind.HOMING, 50f, 30f, Look.HOMING, "ракета",
             "Самонаводящаяся ракета. Через секунду полёта сама поворачивает к врагу.", 0xFF4DD0E1.toInt(), thrust = 120f, burn = 2.5f),
-        Weapon(17, "Звездопад", 110, WeaponKind.METEORS, 18f, 26f, Look.BEACON, "5 метеоритов",
+        Weapon(17, "Звездопад", 110, WeaponKind.METEORS, 30f, 26f, Look.BEACON, "5 метеоритов",
             "Маяк, на который с неба обрушиваются пять метеоритов.", 0xFFFFAB40.toInt()),
-        Weapon(18, "Гравибомба", 120, WeaponKind.GRAVITY, 30f, 40f, Look.GRAV, "чёрная дыра",
+        Weapon(18, "Гравибомба", 120, WeaponKind.GRAVITY, 50f, 40f, Look.GRAV, "чёрная дыра",
             "Открывает крошечную чёрную дыру: она тянет к себе всё вокруг и выедает грунт.", 0xFFB388FF.toInt()),
-        Weapon(19, "Кувалда", 160, WeaponKind.NUKE, 70f, 88f, Look.NUKE, "бомба",
+        Weapon(19, "Кувалда", 160, WeaponKind.NUKE, 120f, 95f, Look.NUKE, "бомба",
             "Огромный взрыв с ударной волной и тремя повторными толчками.", 0xFFFFEB3B.toInt()),
         Weapon(20, "Прыг-скок", 70, WeaponKind.TELEPORT, 0f, 0f, Look.CAPSULE, "телепорт",
             "Капсула-телепорт. Танк переносится туда, где она упадёт.", 0xFFCE93D8.toInt()),
-        Weapon(21, "Ремкомплект", 55, WeaponKind.REPAIR, 0f, 0f, Look.CAPSULE, "ремонт",
-            "Чинит корпус на 30 и самую разбитую деталь наполовину. Тратит ход.", 0xFF69F0AE.toInt()),
+        Weapon(21, "Ремкомплект", 100, WeaponKind.REPAIR, 0f, 0f, Look.CAPSULE, "ремонт",
+            "Чинит корпус на 20 и самую разбитую деталь на 10. Тратит ход.", 0xFF69F0AE.toInt()),
         Weapon(22, "Зонтик", 60, WeaponKind.SHIELD, 0f, 0f, Look.CAPSULE, "щит",
             "Силовой купол, поглощающий 40 единиц урона. Тратит ход.", 0xFF40C4FF.toInt()),
     )
@@ -351,6 +351,7 @@ class Match(val players: List<Player>, val totalRounds: Int) {
 
 class Settings {
     var sound = true
+    var music = true
     var turnTime = 240
     var hints = true
     var follow = true
@@ -362,7 +363,7 @@ class Settings {
     var startMoney = 1500
 
     fun toJson() = JSONObject().apply {
-        put("sound", sound); put("turnTime", turnTime); put("hints", hints); put("follow", follow)
+        put("sound", sound); put("music", music); put("turnTime", turnTime); put("hints", hints); put("follow", follow)
         put("lastLeft", lastLeft); put("lastRight", lastRight); put("rightIsAI", rightIsAI); put("aiLevel", aiLevel)
         put("rounds", rounds); put("startMoney", startMoney); put("version", VERSION)
     }
@@ -372,7 +373,7 @@ class Settings {
         val TURN_TIMES = listOf(30, 45, 60, 90, 120, 180, 240, 0)
 
         fun fromJson(o: JSONObject) = Settings().apply {
-            sound = o.optBoolean("sound", true); turnTime = o.optInt("turnTime", 240); hints = o.optBoolean("hints", true)
+            sound = o.optBoolean("sound", true); music = o.optBoolean("music", true); turnTime = o.optInt("turnTime", 240); hints = o.optBoolean("hints", true)
             // Version 1 defaulted to 45 seconds; turns now default to four minutes.
             if (o.optInt("version", 1) < 2) turnTime = 240
             follow = o.optBoolean("follow", true); lastLeft = o.optString("lastLeft", "Левый")
@@ -416,8 +417,21 @@ class Storage(private val kv: KeyValue) {
 
     fun clearProfiles() = kv.put("profiles", null)
 
+    /** The automatic save (round start, shop visits, leaving a battle). */
     fun hasSave() = kv.get("save") != null
-    fun saveMatch(m: Match) = kv.put("save", m.toJson().toString())
+    fun saveMatch(m: Match) = kv.put("save", m.toJson().put("savedAt", System.currentTimeMillis()).toString())
     fun loadMatch(): Match? = kv.get("save")?.let { runCatching { Match.fromJson(JSONObject(it)) }.getOrNull() }
     fun clearSave() = kv.put("save", null)
+    fun autoSavedAt(): Long = kv.get("save")?.let { runCatching { JSONObject(it).optLong("savedAt") }.getOrNull() } ?: 0L
+
+    // Numbered save slots the player picks by hand.
+    fun saveSlot(i: Int, m: Match) = kv.put("slot_$i", m.toJson().put("savedAt", System.currentTimeMillis()).toString())
+    fun loadSlot(i: Int): Match? = kv.get("slot_$i")?.let { runCatching { Match.fromJson(JSONObject(it)) }.getOrNull() }
+    fun slotSavedAt(i: Int): Long = kv.get("slot_$i")?.let { runCatching { JSONObject(it).optLong("savedAt") }.getOrNull() } ?: 0L
+    fun deleteSlot(i: Int) = kv.put("slot_$i", null)
+    fun hasAnySave() = hasSave() || (0 until SLOTS).any { kv.get("slot_$it") != null }
+
+    companion object {
+        const val SLOTS = 8
+    }
 }

@@ -28,7 +28,7 @@ abstract class Scene(val game: Game) {
     open fun back() {}
 }
 
-class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer) {
+class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer, val music: MusicPlayer = NoMusic) {
     var vw = 1280f
     var vh = 720f
     var time = 0f
@@ -41,11 +41,13 @@ class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer) {
 
     init {
         sound.enabled = settings.sound
+        music.enabled = settings.music
     }
 
     fun start() {
         scene.layout()
         scene.enter()
+        music.play(trackFor(scene))
     }
 
     fun go(s: Scene) {
@@ -54,7 +56,10 @@ class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer) {
         s.layout()
         s.enter()
         fade = 1f
+        music.play(trackFor(s))
     }
+
+    private fun trackFor(s: Scene) = if (s is BattleScene) "battle" else "menu"
 
     fun resize(w: Float, h: Float) {
         if (w == vw && h == vh) return
@@ -66,6 +71,7 @@ class Game(val host: Host, kv: KeyValue, val sound: SoundPlayer) {
     fun saveSettings() {
         store.saveSettings(settings)
         sound.enabled = settings.sound
+        music.enabled = settings.music
     }
 
     fun update(dt: Float) {
@@ -111,6 +117,20 @@ class AndroidSound(private val s: Sound) : SoundPlayer {
         set(v) { s.enabled = v }
 
     override fun play(name: String, vol: Float, rate: Float) = s.play(name, vol, rate)
+}
+
+interface MusicPlayer {
+    var enabled: Boolean
+    fun play(track: String)
+    fun pause()
+    fun resume()
+}
+
+object NoMusic : MusicPlayer {
+    override var enabled = false
+    override fun play(track: String) {}
+    override fun pause() {}
+    override fun resume() {}
 }
 
 object NoSound : SoundPlayer {

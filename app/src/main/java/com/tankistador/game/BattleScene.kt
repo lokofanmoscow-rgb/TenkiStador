@@ -855,10 +855,12 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
         val sx = if (shake > 0f) (rng.nextFloat() - 0.5f) * shake else 0f
         val sy = if (shake > 0f) (rng.nextFloat() - 0.5f) * shake else 0f
         game.drawStars(c, -cam.cx * 0.03f, -cam.cy * 0.03f)
+        drawSun(c)
         c.save()
         c.translate(sx, sy)
         renderer.draw(c, cam, game.time, false) { cc -> drawAimOverlay(cc) }
         c.restore()
+        drawVignette(c)
         if (world.flash > 0f) {
             Gfx.fill.shader = null
             Gfx.fill.color = Gfx.withAlpha(0xFFFFF8E1.toInt(), (min(1f, world.flash / 0.6f) * 170).toInt())
@@ -953,6 +955,39 @@ class BattleScene(game: Game, val match: Match) : Scene(game) {
             val col = if (i == turn && st == St.AIM) Gfx.GREEN else 0xFFB0BEC5.toInt()
             Gfx.text(c, "${p.money} монет", x, panelTop - 8, 20f, col)
         }
+    }
+
+    /** The distant sun that lights every planet from the upper left, with a lens flare. */
+    private fun drawSun(c: Canvas) {
+        val sx = vw * 0.08f - cam.cx * 0.05f
+        val sy = PLATE_H + 30f - cam.cy * 0.05f
+        val pulse = 1f + 0.03f * sin(game.time * 0.7f)
+        Gfx.addGlow(c, sx, sy, 260f * pulse, 0x33FFE0B2)
+        Gfx.addGlow(c, sx, sy, 90f * pulse, 0x88FFF3E0.toInt())
+        Gfx.addGlow(c, sx, sy, 28f, 0xFFFFFFFF.toInt())
+        // Flare ghosts along the line through the screen centre.
+        val cx = vw / 2; val cy = panelTop / 2
+        val ghosts = floatArrayOf(0.35f, 0.62f, 0.9f, 1.25f)
+        val sizes = floatArrayOf(18f, 34f, 12f, 54f)
+        val colors = intArrayOf(0x2240C4FF, 0x22FFAB40, 0x3369F0AE, 0x18B388FF)
+        for (i in ghosts.indices) {
+            val k = ghosts[i]
+            Gfx.addGlow(c, sx + (cx - sx) * 2f * k, sy + (cy - sy) * 2f * k, sizes[i], colors[i])
+        }
+    }
+
+    private val vignette = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var vignetteKey = 0f
+
+    private fun drawVignette(c: Canvas) {
+        val key = vw * 10000f + panelTop
+        if (key != vignetteKey) {
+            vignetteKey = key
+            val r = kotlin.math.hypot(vw / 2, panelTop / 2) * 1.05f
+            vignette.shader = RadialGradient(vw / 2, panelTop / 2, r, intArrayOf(0x00000000, 0x00000000, 0x88000000.toInt()),
+                floatArrayOf(0f, 0.62f, 1f), Shader.TileMode.CLAMP)
+        }
+        c.drawRect(0f, 0f, vw, panelTop, vignette)
     }
 
     /** Side view of the tank with every part tinted by how damaged it is. */

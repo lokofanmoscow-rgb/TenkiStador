@@ -65,7 +65,7 @@ class SettingsScene(game: Game) : Scene(game) {
         val cx = vw / 2
         val x0 = cx + 60
         fun row(i: Int, label: () -> String, act: () -> Unit) {
-            val y = 140f + i * 66
+            val y = 130f + i * 62
             val b = Button(label(), Button.Style.BLUE)
             b.onClick = { act(); b.label = label(); game.saveSettings() }
             b.set(x0, y, x0 + 300, y + 50)
@@ -73,12 +73,13 @@ class SettingsScene(game: Game) : Scene(game) {
             buttons.add(b)
         }
         row(0, { if (s.sound) "Включён" else "Выключен" }) { s.sound = !s.sound }
-        row(1, { turnLabel(s.turnTime) }) {
+        row(1, { if (s.music) "Играет" else "Выключена" }) { s.music = !s.music }
+        row(2, { turnLabel(s.turnTime) }) {
             val opts = Settings.TURN_TIMES
             s.turnTime = opts[(opts.indexOf(s.turnTime).coerceAtLeast(0) + 1) % opts.size]
         }
-        row(2, { if (s.hints) "Показывать" else "Скрывать" }) { s.hints = !s.hints }
-        row(3, { if (s.follow) "Следить" else "Общий план" }) { s.follow = !s.follow }
+        row(3, { if (s.hints) "Показывать" else "Скрывать" }) { s.hints = !s.hints }
+        row(4, { if (s.follow) "Следить" else "Общий план" }) { s.follow = !s.follow }
         val reset = Button("Стереть рекорды", Button.Style.RED)
         reset.onClick = {
             if (confirmReset) {
@@ -90,7 +91,7 @@ class SettingsScene(game: Game) : Scene(game) {
                 reset.label = "Точно стереть?"
             }
         }
-        buttons.add(reset.set(x0, 140f + 4 * 66, x0 + 300, 190f + 4 * 66)).textSize = 21f
+        buttons.add(reset.set(x0, 130f + 5 * 62, x0 + 300, 180f + 5 * 62)).textSize = 21f
         buttons.add(Button("Назад", Button.Style.GREEN) { game.go(MenuScene(game)) }.set(cx - 120, vh - 100, cx + 120, vh - 44))
     }
 
@@ -99,50 +100,11 @@ class SettingsScene(game: Game) : Scene(game) {
     override fun draw(c: Canvas) {
         game.drawStars(c)
         val cx = vw / 2
-        Gfx.screen(c, cx - 420, 40f, cx + 420, vh - 130)
-        Gfx.text(c, "НАСТРОЙКИ", cx, 92f, 36f, Gfx.YELLOW)
-        val labels = listOf("Звук", "Время на ход", "Подсказка траектории", "Камера в полёте", "Таблица рекордов")
+        Gfx.screen(c, cx - 420, 30f, cx + 420, vh - 120)
+        Gfx.text(c, "НАСТРОЙКИ", cx, 82f, 36f, Gfx.YELLOW)
+        val labels = listOf("Звуки", "Музыка", "Время на ход", "Подсказка траектории", "Камера в полёте", "Таблица рекордов")
         for ((i, l) in labels.withIndex()) {
-            Gfx.text(c, l, cx + 30, 174f + i * 66, 23f, 0xFFFFFFFF.toInt(), Gfx.Align.RIGHT)
-        }
-        buttons.draw(c)
-    }
-}
-
-class AuthorsScene(game: Game) : Scene(game) {
-    private var t = 0f
-
-    override fun layout() {
-        buttons.clear()
-        buttons.add(Button("Назад", Button.Style.GREEN) { game.go(MenuScene(game)) }.set(vw / 2 - 120, vh - 90, vw / 2 + 120, vh - 36))
-    }
-
-    override fun update(dt: Float) {
-        super.update(dt)
-        t += dt
-    }
-
-    override fun back() = game.go(MenuScene(game))
-
-    override fun draw(c: Canvas) {
-        game.drawStars(c, sin(t * 0.2f) * 20f, 0f)
-        val cx = vw / 2
-        Gfx.screen(c, cx - 440, 40f, cx + 440, vh - 120)
-        Gfx.text(c, "АВТОРЫ", cx, 92f, 36f, Gfx.YELLOW)
-        val text = "TankiStador — фанатская игра по мотивам старых артиллерийских дуэлей на планетах.\n\n" +
-            "Танки ходят по очереди, ездят по крошечным планетам и стреляют снарядами, " +
-            "которые притягивает каждая планета на пути. Между раундами — танковый базар, ремонт и новые звания.\n\n" +
-            "Код, графика и звуки сгенерированы программно, без чужих ресурсов.\n" +
-            "Сделано с помощью Claude Code."
-        Gfx.textBlock(c, text, cx, 120f, 800f, 21f, 0xFFE0F2F1.toInt())
-        for (i in 0 until 3) {
-            c.save()
-            val x = cx - 200 + i * 200f
-            c.translate(x, vh - 160 + sin(t * 2 + i) * 4)
-            c.scale(2.4f, 2.4f)
-            TankArt.draw(c, Tanks.all[i * 3 + 1].look, if (i == 1) Player.COLOR_RIGHT else Player.COLOR_LEFT,
-                TankArt.State(aim = 90f + 50f * sin(t + i), time = t + i, active = true))
-            c.restore()
+            Gfx.text(c, l, cx + 30, 164f + i * 62, 23f, 0xFFFFFFFF.toInt(), Gfx.Align.RIGHT)
         }
         buttons.draw(c)
     }

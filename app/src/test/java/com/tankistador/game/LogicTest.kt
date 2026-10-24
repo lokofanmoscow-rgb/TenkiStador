@@ -179,6 +179,67 @@ class LogicTest {
     }
 
     @Test
+    fun tankDrivesThroughAPitInsteadOfGettingStuck() {
+        val w = twoPlanetWorld()
+        val t = w.tanks[0]
+        val pl = t.planet
+        // Dig a pit just ahead of the tank and a steep crater beyond it.
+        val out = FloatArray(2)
+        pl.surfacePoint(t.ang + 30f / pl.surfaceAt(t.ang), 0f, out)
+        pl.carve(out[0], out[1], 12f, Random(3))
+        pl.surfacePoint(t.ang + 70f / pl.surfaceAt(t.ang), 0f, out)
+        pl.carve(out[0], out[1], 26f, Random(4))
+        t.fuel = 200f
+        val start = t.ang
+        var moved = 0
+        repeat(60 * 6) { if (w.moveTank(t, 1, 1f / 60f)) moved++; w.update(1f / 60f) }
+        val travelled = (t.ang - start) * pl.baseR
+        assertTrue("travelled $travelled", travelled > 95f)
+        assertTrue(moved > 300)
+    }
+
+    @Test
+    fun steepCraterWallsCrumble() {
+        val p = Planet(0, 0f, 0f, 100f, 1f, 0, 0)
+        p.carve(0f, -100f, 30f, Random(5))
+        fun steepest(): Float {
+            var m = 0f
+            for (i in 0 until Planet.N) m = maxOf(m, kotlin.math.abs(p.r[i] - p.r[(i + 1) % Planet.N]))
+            return m
+        }
+        val before = steepest()
+        repeat(40) { p.relax() }
+        assertTrue("walls should flatten: $before -> ${steepest()}", steepest() < before)
+    }
+
+    @Test
+    fun saveSlotsKeepSeparateGames() {
+        val store = Storage(MemKV())
+        val a = aiMatch(); a.round = 2
+        val b = aiMatch(); b.round = 4
+        store.saveSlot(0, a)
+        store.saveSlot(5, b)
+        assertEquals(2, store.loadSlot(0)!!.round)
+        assertEquals(4, store.loadSlot(5)!!.round)
+        assertTrue(store.loadSlot(1) == null)
+        assertTrue(store.hasAnySave())
+        store.deleteSlot(0)
+        assertTrue(store.loadSlot(0) == null)
+        assertTrue(store.slotSavedAt(5) > 0)
+    }
+
+    @Test
+    fun repairKitFixesHullAndWorstPart() {
+        val w = twoPlanetWorld()
+        val t = w.tanks[0]
+        t.hull = 50f; t.gun = 0f
+        w.fire(t, Weapons.byKind(WeaponKind.REPAIR))
+        assertEquals(70f, t.hull, 0.01f)
+        assertEquals(10f, t.gun, 0.01f)
+        assertEquals(100, Weapons.byKind(WeaponKind.REPAIR).price)
+    }
+
+    @Test
     fun movingSpendsFuelAndStopsWhenEmpty() {
         val w = twoPlanetWorld()
         val t = w.tanks[0]

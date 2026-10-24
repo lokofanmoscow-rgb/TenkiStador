@@ -41,10 +41,14 @@ object Flow {
 
     fun resume(game: Game): Boolean {
         val m = game.store.loadMatch() ?: return false
-        if (m.over) {
-            game.store.clearSave()
-            return false
-        }
+        return resumeMatch(game, m)
+    }
+
+    /** Continues a loaded match where it was saved: in the bazaar or at the start of the round. */
+    fun resumeMatch(game: Game, m: Match): Boolean {
+        if (m.over) return false
+        // The loaded game becomes the current one, so autosaves continue from here.
+        game.store.saveMatch(m)
         if (m.stage == "battle") game.go(BattleScene(game, m)) else openShopOrBattle(game, m, -1)
         return true
     }
